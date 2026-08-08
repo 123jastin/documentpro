@@ -1,0 +1,6 @@
+{
+  "name": "DocuPro – All Document Reader & Editor",
+  "description": "Professional native Android document management, PDF reader/annotator, document scanner, file manager, and office viewer/editor application.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
