@@ -94,6 +94,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import com.example.ads.NativeDocumentAdCard
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -620,6 +621,15 @@ fun DocxEditorScreen(
                         )
                     )
                 }
+            }
+
+            // Native Ad after the last page/content of the Word document
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+            ) {
+                NativeDocumentAdCard()
             }
         }
     }

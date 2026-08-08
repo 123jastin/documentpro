@@ -85,6 +85,7 @@ import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Security
+import com.example.ads.NativeDocumentAdCard
 
 @Composable
 fun HomeScreen(
@@ -572,7 +573,8 @@ fun HomeScreen(
                     }
                 }
             } else {
-                items(displayDocs) { doc ->
+                items(displayDocs.size) { index ->
+                    val doc = displayDocs[index]
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         DocumentCard(
                             document = doc,
@@ -580,6 +582,13 @@ fun HomeScreen(
                             onStarToggle = { viewModel.toggleStar(doc) },
                             onOptionsClick = { selectedBottomSheetDoc = doc }
                         )
+                    }
+
+                    // On Home screen: Show 1 native ad maximum after the 5th document when 5 or more documents exist
+                    if (displayDocs.size >= 5 && index == 4) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                            NativeDocumentAdCard()
+                        }
                     }
                 }
             }

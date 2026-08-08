@@ -89,6 +89,7 @@ import androidx.compose.material.icons.filled.Save
 import com.example.data.model.DocumentFileType
 import com.example.data.model.DocumentItem
 import com.example.ui.components.SaveAsDialog
+import com.example.ads.NativeDocumentAdCard
 import java.io.File
 import java.io.FileOutputStream
 
@@ -413,6 +414,17 @@ fun PdfViewerScreen(
                                 CircularProgressIndicator(color = ColorPdfRed)
                             }
                         }
+                    }
+                }
+
+                // Native Ad placed only AFTER the last page of the document
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        NativeDocumentAdCard()
                     }
                 }
             }

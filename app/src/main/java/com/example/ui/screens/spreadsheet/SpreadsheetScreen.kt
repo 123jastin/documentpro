@@ -63,6 +63,7 @@ import com.example.data.engine.SheetData
 import com.example.data.engine.SpreadsheetEngine
 import com.example.ui.components.SaveAsDialog
 import com.example.ui.theme.ColorExcelGreen
+import com.example.ads.NativeDocumentAdCard
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -314,6 +315,17 @@ fun SpreadsheetScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    // Native Ad after spreadsheet content
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            NativeDocumentAdCard()
                         }
                     }
                 }

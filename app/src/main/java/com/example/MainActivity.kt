@@ -47,11 +47,22 @@ import com.example.data.db.DocuProDatabase
 import com.example.data.repository.DocumentRepository
 import com.example.ui.screens.pdftools.PdfToolsScreen
 
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.ads.MobileAds
+import com.example.ads.RewardedAdManager
+
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Initialize AdMob SDK & preload Rewarded Ad
+        MobileAds.initialize(this)
+        RewardedAdManager.loadAd(this)
 
         val intentUri = intent?.data
 
@@ -77,6 +88,22 @@ fun DocuProApp(initialUri: Uri? = null) {
         Screen.Starred.route,
         Screen.Settings.route
     )
+
+    val scope = rememberCoroutineScope()
+    val openPhoneFilesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val db = DocuProDatabase.getDatabase(context)
+                val repo = DocumentRepository(context, db.documentDao(), db.annotationDao(), db.scanDao())
+                val importedDoc = repo.importDocumentFromUri(uri)
+                if (importedDoc != null) {
+                    routeToDocumentViewer(importedDoc)
+                }
+            }
+        }
+    }
 
     fun routeToDocumentViewer(doc: DocumentItem) {
         val encodedUri = Uri.encode(doc.uriString)
@@ -109,6 +136,19 @@ fun DocuProApp(initialUri: Uri? = null) {
                 DocuProBottomNav(
                     currentRoute = currentRoute,
                     onNavigate = { route ->
+                        if (route == Screen.Files.route) {
+                            openPhoneFilesLauncher.launch(
+                                arrayOf(
+                                    "application/pdf",
+                                    "application/msword",
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    "application/vnd.ms-excel",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    "text/plain",
+                                    "image/*"
+                                )
+                            )
+                        }
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true

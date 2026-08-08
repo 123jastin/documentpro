@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -74,6 +75,13 @@ import com.example.ui.theme.ColorPptOrange
 import com.example.ui.theme.ColorTextGray
 import com.example.ui.theme.ColorWordBlue
 import com.example.ui.theme.PrimaryBlue600
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.ui.platform.LocalContext
+import com.example.ads.NativeDocumentAdCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +100,21 @@ fun FileManagerScreen(
 
     var showSortMenu by remember { mutableStateOf(false) }
     var selectedBottomSheetDoc by remember { mutableStateOf<DocumentItem?>(null) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val openFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val doc = viewModel.repository.importDocumentFromUri(uri)
+                if (doc != null) {
+                    onOpenDocument(doc)
+                }
+            }
+        }
+    }
 
     remember {
         if (initialCategory != null) {
@@ -120,6 +143,21 @@ fun FileManagerScreen(
                             Icon(imageVector = Icons.Filled.Close, contentDescription = "Cancel")
                         }
                     } else {
+                        IconButton(onClick = {
+                            openFileLauncher.launch(
+                                arrayOf(
+                                    "application/pdf",
+                                    "application/msword",
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    "application/vnd.ms-excel",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    "text/plain",
+                                    "image/*"
+                                )
+                            )
+                        }) {
+                            Icon(imageVector = Icons.Filled.FolderOpen, contentDescription = "Open Phone Files", tint = PrimaryBlue600)
+                        }
                         IconButton(onClick = { showSortMenu = true }) {
                             Icon(imageVector = Icons.Filled.Sort, contentDescription = "Sort")
                         }
@@ -258,6 +296,15 @@ fun FileManagerScreen(
                     }
                 }
             } else {
+                val adPositions = remember(documents.size) {
+                    when {
+                        documents.size >= 20 -> setOf(4, 11, 18)
+                        documents.size >= 10 -> setOf(4, 9)
+                        documents.size >= 5 -> setOf(4)
+                        else -> emptySet()
+                    }
+                }
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(if (isGrid) 2 else 1),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -265,7 +312,7 @@ fun FileManagerScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(documents, key = { it.uriString }) { doc ->
+                    itemsIndexed(documents, key = { _, doc -> doc.uriString }) { index, doc ->
                         val isSelected = selectedUris.contains(doc.uriString)
 
                         Box(modifier = Modifier.fillMaxWidth()) {
@@ -294,6 +341,17 @@ fun FileManagerScreen(
                                         tint = if (isSelected) PrimaryBlue600 else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+                            }
+                        }
+
+                        // Native Ad according to AdMob Category Rules
+                        if (adPositions.contains(index)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                NativeDocumentAdCard()
                             }
                         }
                     }
