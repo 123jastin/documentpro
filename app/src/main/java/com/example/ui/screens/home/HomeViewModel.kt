@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import android.net.Uri
+
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = DocuProDatabase.getDatabase(application)
@@ -25,6 +27,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             repository.ensureSampleDocumentsExist()
+        }
+    }
+
+    suspend fun importDocument(uri: Uri): DocumentItem {
+        return repository.importDocumentFromUri(uri)
+    }
+
+    fun scanStorage() {
+        viewModelScope.launch {
+            repository.scanDeviceDocuments()
         }
     }
 

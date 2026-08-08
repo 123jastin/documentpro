@@ -43,9 +43,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,6 +92,7 @@ fun HomeScreen(
     val starredDocs by viewModel.starredDocuments.collectAsStateWithLifecycle()
     val allDocs by viewModel.allDocuments.collectAsStateWithLifecycle()
 
+    val scope = rememberCoroutineScope()
     var selectedBottomSheetDoc by remember { mutableStateOf<DocumentItem?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<DocumentFileType?>(null) }
 
@@ -98,17 +101,10 @@ fun HomeScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            val extension = uri.lastPathSegment?.substringAfterLast('.', "pdf") ?: "pdf"
-            val fileType = DocumentFileType.fromExtension(extension)
-            val doc = DocumentItem(
-                uriString = uri.toString(),
-                displayName = uri.lastPathSegment?.substringAfterLast('/') ?: "Opened Document",
-                extension = extension,
-                fileType = fileType,
-                sizeBytes = 1024L * 250L,
-                dateModified = System.currentTimeMillis()
-            )
-            onOpenDocument(doc)
+            scope.launch {
+                val doc = viewModel.importDocument(uri)
+                onOpenDocument(doc)
+            }
         }
     }
 

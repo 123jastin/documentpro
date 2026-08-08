@@ -42,7 +42,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +72,7 @@ fun DocxEditorScreen(
 
     var textContent by remember { mutableStateOf("") }
     var fileName by remember { mutableStateOf("Document.docx") }
+    var isFullScreen by remember { mutableStateOf(false) }
     var isBoldActive by remember { mutableStateOf(false) }
     var isItalicActive by remember { mutableStateOf(false) }
     var isUnderlineActive by remember { mutableStateOf(false) }
@@ -87,83 +91,90 @@ fun DocxEditorScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = {
-                    Column {
-                        Text(text = fileName, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        Text(text = "$wordCount words • DOCX Editor", fontSize = 11.sp, color = ColorWordBlue)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            wordEngine.writeWordDocument(context, uri, textContent)
+            if (!isFullScreen) {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                    title = {
+                        Column {
+                            Text(text = fileName, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(text = "$wordCount words • DOCX Editor", fontSize = 11.sp, color = ColorWordBlue)
                         }
-                    }) {
-                        Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = ColorWordBlue)
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { isFullScreen = true }) {
+                            Icon(imageVector = Icons.Outlined.Fullscreen, contentDescription = "Full Screen")
+                        }
+                        IconButton(onClick = {
+                            scope.launch {
+                                wordEngine.writeWordDocument(context, uri, textContent)
+                            }
+                        }) {
+                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = ColorWordBlue)
+                        }
+                        IconButton(onClick = { /* Share */ }) {
+                            Icon(imageVector = Icons.Filled.Share, contentDescription = "Share")
+                        }
                     }
-                    IconButton(onClick = { /* Share */ }) {
-                        Icon(imageVector = Icons.Filled.Share, contentDescription = "Share")
-                    }
-                }
-            )
+                )
+            }
         },
         bottomBar = {
-            BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { isBoldActive = !isBoldActive }) {
-                        Icon(
-                            imageVector = Icons.Filled.FormatBold,
-                            contentDescription = "Bold",
-                            tint = if (isBoldActive) ColorWordBlue else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { isItalicActive = !isItalicActive }) {
-                        Icon(
-                            imageVector = Icons.Filled.FormatItalic,
-                            contentDescription = "Italic",
-                            tint = if (isItalicActive) ColorWordBlue else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { isUnderlineActive = !isUnderlineActive }) {
-                        Icon(
-                            imageVector = Icons.Filled.FormatUnderlined,
-                            contentDescription = "Underline",
-                            tint = if (isUnderlineActive) ColorWordBlue else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { textContent += "\n• " }) {
-                        Icon(imageVector = Icons.Filled.FormatListBulleted, contentDescription = "Bullet List")
+            if (!isFullScreen) {
+                BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { isBoldActive = !isBoldActive }) {
+                            Icon(
+                                imageVector = Icons.Filled.FormatBold,
+                                contentDescription = "Bold",
+                                tint = if (isBoldActive) ColorWordBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { isItalicActive = !isItalicActive }) {
+                            Icon(
+                                imageVector = Icons.Filled.FormatItalic,
+                                contentDescription = "Italic",
+                                tint = if (isItalicActive) ColorWordBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { isUnderlineActive = !isUnderlineActive }) {
+                            Icon(
+                                imageVector = Icons.Filled.FormatUnderlined,
+                                contentDescription = "Underline",
+                                tint = if (isUnderlineActive) ColorWordBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { textContent += "\n• " }) {
+                            Icon(imageVector = Icons.Filled.FormatListBulleted, contentDescription = "Bullet List")
+                        }
                     }
                 }
             }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(if (isFullScreen) androidx.compose.foundation.layout.PaddingValues(0.dp) else innerPadding)
                 .background(Color(0xFFF8FAFC))
-                .padding(16.dp)
+                .padding(if (isFullScreen) 0.dp else 16.dp)
                 .testTag("docx_editor_screen")
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
-                shape = RoundedCornerShape(12.dp),
+                shape = if (isFullScreen) RoundedCornerShape(0.dp) else RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 OutlinedTextField(
@@ -177,6 +188,23 @@ fun DocxEditorScreen(
                         fontStyle = if (isItalicActive) FontStyle.Italic else FontStyle.Normal
                     )
                 )
+            }
+
+            if (isFullScreen) {
+                IconButton(
+                    onClick = { isFullScreen = false },
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.TopEnd)
+                        .padding(16.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.FullscreenExit,
+                        contentDescription = "Exit Full Screen",
+                        tint = Color.White
+                    )
+                }
             }
         }
     }

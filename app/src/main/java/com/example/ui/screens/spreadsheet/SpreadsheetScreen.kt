@@ -41,7 +41,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +71,7 @@ fun SpreadsheetScreen(
     var selectedCell by remember { mutableStateOf<Pair<Int, Int>?>(Pair(0, 0)) }
     var formulaInput by remember { mutableStateOf("") }
     var fileName by remember { mutableStateOf("Spreadsheet.xlsx") }
+    var isFullScreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(documentUri) {
         val result = engine.parseDocument(context, uri)
@@ -88,167 +92,193 @@ fun SpreadsheetScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = {
-                    Column {
-                        Text(text = fileName, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        Text(text = "Spreadsheet Grid • ${currentSheet.rowCount}x${currentSheet.columnCount}", fontSize = 11.sp, color = ColorExcelGreen)
+            if (!isFullScreen) {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                    title = {
+                        Column {
+                            Text(text = fileName, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(text = "Spreadsheet Grid • ${currentSheet.rowCount}x${currentSheet.columnCount}", fontSize = 11.sp, color = ColorExcelGreen)
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { isFullScreen = true }) {
+                            Icon(imageVector = Icons.Outlined.Fullscreen, contentDescription = "Full Screen")
+                        }
+                        IconButton(onClick = { /* Save */ }) {
+                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = ColorExcelGreen)
+                        }
                     }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* Save */ }) {
-                        Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = ColorExcelGreen)
-                    }
-                }
-            )
+                )
+            }
         },
         bottomBar = {
-            // Formula Input Bar
-            BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = Icons.Filled.Functions, contentDescription = "Formula", tint = ColorExcelGreen)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (selectedCell != null) "${getColName(selectedCell!!.second)}${selectedCell!!.first + 1}" else "fx",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorExcelGreen
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedTextField(
-                        value = formulaInput,
-                        onValueChange = { formulaInput = it },
-                        placeholder = { Text("Enter value or formula =SUM(...)") },
-                        singleLine = true,
+            if (!isFullScreen) {
+                // Formula Input Bar
+                BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                    )
-                    IconButton(onClick = {
-                        val sel = selectedCell
-                        if (sel != null) {
-                            val mutableCells = currentSheet.cells.toMutableMap()
-                            mutableCells[sel] = CellData(
-                                value = formulaInput,
-                                formula = if (formulaInput.startsWith("=")) formulaInput else null
-                            )
-                            sheetData = currentSheet.copy(cells = mutableCells)
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Filled.Functions, contentDescription = "Formula", tint = ColorExcelGreen)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (selectedCell != null) "${getColName(selectedCell!!.second)}${selectedCell!!.first + 1}" else "fx",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorExcelGreen
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = formulaInput,
+                            onValueChange = { formulaInput = it },
+                            placeholder = { Text("Enter value or formula =SUM(...)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                        )
+                        IconButton(onClick = {
+                            val sel = selectedCell
+                            if (sel != null) {
+                                val mutableCells = currentSheet.cells.toMutableMap()
+                                mutableCells[sel] = CellData(
+                                    value = formulaInput,
+                                    formula = if (formulaInput.startsWith("=")) formulaInput else null
+                                )
+                                sheetData = currentSheet.copy(cells = mutableCells)
+                            }
+                        }) {
+                            Icon(imageVector = Icons.Filled.Check, contentDescription = "Apply", tint = ColorExcelGreen)
                         }
-                    }) {
-                        Icon(imageVector = Icons.Filled.Check, contentDescription = "Apply", tint = ColorExcelGreen)
                     }
                 }
             }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(if (isFullScreen) androidx.compose.foundation.layout.PaddingValues(0.dp) else innerPadding)
                 .background(Color(0xFFF1F5F9))
                 .testTag("spreadsheet_screen")
         ) {
-            // Grid Header Row (Column Letters)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(horizontalScrollState)
-                    .background(Color(0xFFCBD5E1))
-            ) {
-                Box(
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Grid Header Row (Column Letters)
+                Row(
                     modifier = Modifier
-                        .width(44.dp)
-                        .height(36.dp)
-                        .border(0.5.dp, Color.Gray),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .horizontalScroll(horizontalScrollState)
+                        .background(Color(0xFFCBD5E1))
                 ) {
-                    Text(text = " ", fontSize = 11.sp)
-                }
-                for (col in 0 until currentSheet.columnCount) {
                     Box(
                         modifier = Modifier
-                            .width(110.dp)
+                            .width(44.dp)
                             .height(36.dp)
                             .border(0.5.dp, Color.Gray),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = androidx.compose.ui.Alignment.Center
                     ) {
-                        Text(
-                            text = getColName(col),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
+                        Text(text = " ", fontSize = 11.sp)
+                    }
+                    for (col in 0 until currentSheet.columnCount) {
+                        Box(
+                            modifier = Modifier
+                                .width(110.dp)
+                                .height(36.dp)
+                                .border(0.5.dp, Color.Gray),
+                            contentAlignment = androidx.compose.ui.Alignment.Center
+                        ) {
+                            Text(
+                                text = getColName(col),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+
+                // Grid Rows
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(currentSheet.rowCount) { rowIdx ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(horizontalScrollState)
+                        ) {
+                            // Row Number Header
+                            Box(
+                                modifier = Modifier
+                                    .width(44.dp)
+                                    .height(40.dp)
+                                    .background(Color(0xFFE2E8F0))
+                                    .border(0.5.dp, Color.Gray),
+                                contentAlignment = androidx.compose.ui.Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${rowIdx + 1}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.DarkGray
+                                )
+                            }
+
+                            // Cells in Row
+                            for (colIdx in 0 until currentSheet.columnCount) {
+                                val cellData = currentSheet.cells[Pair(rowIdx, colIdx)]
+                                val isSelected = selectedCell == Pair(rowIdx, colIdx)
+
+                                Box(
+                                    modifier = Modifier
+                                        .width(110.dp)
+                                        .height(40.dp)
+                                        .background(if (isSelected) ColorExcelGreen.copy(alpha = 0.2f) else Color.White)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 0.5.dp,
+                                            color = if (isSelected) ColorExcelGreen else Color.LightGray
+                                        )
+                                        .clickable {
+                                            selectedCell = Pair(rowIdx, colIdx)
+                                            formulaInput = cellData?.formula ?: cellData?.value ?: ""
+                                        }
+                                        .padding(horizontal = 6.dp),
+                                    contentAlignment = androidx.compose.ui.Alignment.CenterStart
+                                ) {
+                                    Text(
+                                        text = cellData?.value ?: "",
+                                        fontSize = 12.sp,
+                                        fontWeight = if (cellData?.isBold == true) FontWeight.Bold else FontWeight.Normal,
+                                        color = Color.Black,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // Grid Rows
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(currentSheet.rowCount) { rowIdx ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(horizontalScrollState)
-                    ) {
-                        // Row Number Header
-                        Box(
-                            modifier = Modifier
-                                .width(44.dp)
-                                .height(40.dp)
-                                .background(Color(0xFFE2E8F0))
-                                .border(0.5.dp, Color.Gray),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${rowIdx + 1}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.DarkGray
-                            )
-                        }
-
-                        // Cells in Row
-                        for (colIdx in 0 until currentSheet.columnCount) {
-                            val cellData = currentSheet.cells[Pair(rowIdx, colIdx)]
-                            val isSelected = selectedCell == Pair(rowIdx, colIdx)
-
-                            Box(
-                                modifier = Modifier
-                                    .width(110.dp)
-                                    .height(40.dp)
-                                    .background(if (isSelected) ColorExcelGreen.copy(alpha = 0.2f) else Color.White)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 0.5.dp,
-                                        color = if (isSelected) ColorExcelGreen else Color.LightGray
-                                    )
-                                    .clickable {
-                                        selectedCell = Pair(rowIdx, colIdx)
-                                        formulaInput = cellData?.formula ?: cellData?.value ?: ""
-                                    }
-                                    .padding(horizontal = 6.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(
-                                    text = cellData?.value ?: "",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (cellData?.isBold == true) FontWeight.Bold else FontWeight.Normal,
-                                    color = Color.Black,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
+            if (isFullScreen) {
+                IconButton(
+                    onClick = { isFullScreen = false },
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.TopEnd)
+                        .padding(16.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.FullscreenExit,
+                        contentDescription = "Exit Full Screen",
+                        tint = Color.White
+                    )
                 }
             }
         }

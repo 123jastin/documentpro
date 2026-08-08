@@ -35,6 +35,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +65,7 @@ fun TextEditorScreen(
 
     var textContent by remember { mutableStateOf("") }
     var fileName by remember { mutableStateOf("Note.txt") }
+    var isFullScreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(documentUri) {
         val result = engine.parseDocument(context, uri)
@@ -75,42 +80,47 @@ fun TextEditorScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = {
-                    Column {
-                        Text(text = fileName, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        Text(text = "${lines.size} lines • $wordCount words • Text Editor", fontSize = 11.sp, color = ColorTextGray)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            engine.saveTextToUri(context, uri, textContent)
+            if (!isFullScreen) {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                    title = {
+                        Column {
+                            Text(text = fileName, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(text = "${lines.size} lines • $wordCount words • Text Editor", fontSize = 11.sp, color = ColorTextGray)
                         }
-                    }) {
-                        Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = PrimaryBlue600)
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { isFullScreen = true }) {
+                            Icon(imageVector = Icons.Outlined.Fullscreen, contentDescription = "Full Screen")
+                        }
+                        IconButton(onClick = {
+                            scope.launch {
+                                engine.saveTextToUri(context, uri, textContent)
+                            }
+                        }) {
+                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = PrimaryBlue600)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
-        Column(
+        androidx.compose.foundation.layout.Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(if (isFullScreen) androidx.compose.foundation.layout.PaddingValues(0.dp) else innerPadding)
                 .background(Color(0xFFF8FAFC))
-                .padding(16.dp)
+                .padding(if (isFullScreen) 0.dp else 16.dp)
                 .testTag("text_editor_screen")
         ) {
             Card(
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(12.dp),
+                shape = if (isFullScreen) RoundedCornerShape(0.dp) else RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Row(
@@ -145,6 +155,23 @@ fun TextEditorScreen(
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
                             fontFamily = FontFamily.Monospace
                         )
+                    )
+                }
+            }
+
+            if (isFullScreen) {
+                IconButton(
+                    onClick = { isFullScreen = false },
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.TopEnd)
+                        .padding(16.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.FullscreenExit,
+                        contentDescription = "Exit Full Screen",
+                        tint = Color.White
                     )
                 }
             }

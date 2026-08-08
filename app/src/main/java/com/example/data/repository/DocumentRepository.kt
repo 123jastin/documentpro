@@ -104,114 +104,187 @@ class DocumentRepository(
         documentDao.insertDocument(document)
     }
 
-    // Populate initial realistic sample documents if database is empty on first run
     suspend fun ensureSampleDocumentsExist() = withContext(Dispatchers.IO) {
-        val currentDocs = allDocuments.first()
-        if (currentDocs.isNotEmpty()) return@withContext
+        scanDeviceDocuments()
+    }
 
-        val docsDir = File(context.filesDir, "documents")
-        if (!docsDir.exists()) docsDir.mkdirs()
+    suspend fun scanDeviceDocuments(): List<DocumentItem> = withContext(Dispatchers.IO) {
+        val scannedDocs = mutableListOf<DocumentItem>()
+        val foundUris = mutableSetOf<String>()
 
-        val pdfEngine = PdfDocumentEngine()
-        val samplePdf = File(docsDir, "Annual_Report_2026.pdf")
-        if (!samplePdf.exists()) {
-            pdfEngine.createBlankPdf(samplePdf, pageCount = 6)
-        }
+        // 1. Query MediaStore.Files for documents on the phone
+        try {
+            val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                android.provider.MediaStore.Files.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL)
+            } else {
+                android.provider.MediaStore.Files.getContentUri("external")
+            }
 
-        val wordFile = File(docsDir, "Project_Proposal_DocuPro.docx")
-        if (!wordFile.exists()) {
-            wordFile.writeText("DocuPro Project Proposal & Roadmap\n\n1. Executive Overview\nDocuPro delivers enterprise-grade native Android document processing, PDF annotations, formatted Office document reading, and camera scanning.\n\n2. Key Objectives\n• Ultra-fast PDF page rendering\n• Real local Room database persistence for recents & favorites\n• Offline document scanner with edge filters and text recognition\n\n3. Deliverables & Acceptance Criteria\n• Zero crash tolerance\n• Edge-to-edge Material 3 interface\n• 100% privacy with zero unauthorized network telemetry.")
-        }
-
-        val excelFile = File(docsDir, "Q3_Financial_Budget.csv")
-        if (!excelFile.exists()) {
-            excelFile.writeText("Department,Q1 Budget ($),Q2 Budget ($),Q3 Budget ($),Status\nEngineering,125000,132000,140000,Approved\nDesign,35000,38000,42000,Approved\nMarketing,45000,52000,60000,Pending\nOperations,28000,30000,31000,Approved\nLegal & IP,15000,12000,18000,Approved\nTotal,248000,264000,291000,In Review")
-        }
-
-        val pptFile = File(docsDir, "Executive_Strategy_Deck.pptx")
-        if (!pptFile.exists()) {
-            pptFile.writeText("Executive Strategy Deck Slide 1 Title: DocuPro Overview Slide 2 Title: Q3 Growth Milestones Slide 3 Title: Architecture Summary")
-        }
-
-        val txtFile = File(docsDir, "Meeting_Notes_Aug2026.txt")
-        if (!txtFile.exists()) {
-            txtFile.writeText("Meeting Notes - August 8, 2026\n\nAttendees: Alex, Sarah, David, Elena\n\nKey Decisions:\n1. Approved new Deep Blue color theme and Material 3 design spec for DocuPro.\n2. Finalized offline-first storage architecture using Room and Storage Access Framework.\n3. Verified CameraX scanner with automatic brightness, contrast, and B&W filters.\n\nNext Steps:\n- Complete PDF annotation drawing canvas test suite.\n- Perform benchmark build verification with compile_applet.")
-        }
-
-        val now = System.currentTimeMillis()
-        val samples = listOf(
-            DocumentItem(
-                uriString = Uri.fromFile(samplePdf).toString(),
-                displayName = "Annual_Report_2026.pdf",
-                extension = "pdf",
-                fileType = DocumentFileType.PDF,
-                sizeBytes = samplePdf.length(),
-                dateModified = now - 3600000,
-                isStarred = true,
-                isRecent = true,
-                lastOpenedTime = now - 3600000,
-                pageCount = 6,
-                filePath = samplePdf.absolutePath,
-                contentSummary = "Annual Financial & Operations Report 2026"
-            ),
-            DocumentItem(
-                uriString = Uri.fromFile(wordFile).toString(),
-                displayName = "Project_Proposal_DocuPro.docx",
-                extension = "docx",
-                fileType = DocumentFileType.WORD,
-                sizeBytes = wordFile.length(),
-                dateModified = now - 7200000,
-                isStarred = true,
-                isRecent = true,
-                lastOpenedTime = now - 7200000,
-                pageCount = 3,
-                filePath = wordFile.absolutePath,
-                contentSummary = "DocuPro Project Proposal & Feature Specifications"
-            ),
-            DocumentItem(
-                uriString = Uri.fromFile(excelFile).toString(),
-                displayName = "Q3_Financial_Budget.csv",
-                extension = "csv",
-                fileType = DocumentFileType.EXCEL,
-                sizeBytes = excelFile.length(),
-                dateModified = now - 14400000,
-                isStarred = false,
-                isRecent = true,
-                lastOpenedTime = now - 14400000,
-                pageCount = 1,
-                filePath = excelFile.absolutePath,
-                contentSummary = "Department Budget Breakdown for Q1, Q2, Q3"
-            ),
-            DocumentItem(
-                uriString = Uri.fromFile(pptFile).toString(),
-                displayName = "Executive_Strategy_Deck.pptx",
-                extension = "pptx",
-                fileType = DocumentFileType.POWERPOINT,
-                sizeBytes = pptFile.length(),
-                dateModified = now - 28800000,
-                isStarred = false,
-                isRecent = true,
-                lastOpenedTime = now - 28800000,
-                pageCount = 4,
-                filePath = pptFile.absolutePath,
-                contentSummary = "DocuPro Strategy Deck and Growth Roadmap"
-            ),
-            DocumentItem(
-                uriString = Uri.fromFile(txtFile).toString(),
-                displayName = "Meeting_Notes_Aug2026.txt",
-                extension = "txt",
-                fileType = DocumentFileType.TEXT,
-                sizeBytes = txtFile.length(),
-                dateModified = now - 43200000,
-                isStarred = true,
-                isRecent = true,
-                lastOpenedTime = now - 43200000,
-                pageCount = 1,
-                filePath = txtFile.absolutePath,
-                contentSummary = "Team Meeting Minutes and Key Action Items"
+            val projection = arrayOf(
+                android.provider.MediaStore.Files.FileColumns._ID,
+                android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME,
+                android.provider.MediaStore.Files.FileColumns.DATA,
+                android.provider.MediaStore.Files.FileColumns.SIZE,
+                android.provider.MediaStore.Files.FileColumns.DATE_MODIFIED
             )
+
+            val selection = "(" +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.pdf' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.doc' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.docx' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.xls' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.xlsx' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.csv' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.ppt' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.pptx' OR " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE '%.txt'" +
+                    ")"
+
+            context.contentResolver.query(
+                collection,
+                projection,
+                selection,
+                null,
+                "${android.provider.MediaStore.Files.FileColumns.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns._ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME)
+                val dataColumn = cursor.getColumnIndex(android.provider.MediaStore.Files.FileColumns.DATA)
+                val sizeColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.SIZE)
+                val dateColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.DATE_MODIFIED)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idColumn)
+                    val name = cursor.getString(nameColumn) ?: "Document"
+                    val filePath = if (dataColumn != -1) cursor.getString(dataColumn) else null
+                    val size = cursor.getLong(sizeColumn)
+                    val dateMod = cursor.getLong(dateColumn) * 1000L
+
+                    val contentUri = android.content.ContentUris.withAppendedId(collection, id)
+                    val uriStr = contentUri.toString()
+
+                    if (!foundUris.contains(uriStr)) {
+                        foundUris.add(uriStr)
+                        val ext = name.substringAfterLast('.', "").lowercase()
+                        val fileType = when (ext) {
+                            "pdf" -> DocumentFileType.PDF
+                            "doc", "docx" -> DocumentFileType.WORD
+                            "xls", "xlsx", "csv" -> DocumentFileType.EXCEL
+                            "ppt", "pptx" -> DocumentFileType.POWERPOINT
+                            "txt" -> DocumentFileType.TEXT
+                            else -> DocumentFileType.OTHER
+                        }
+
+                        scannedDocs.add(
+                            DocumentItem(
+                                uriString = uriStr,
+                                displayName = name,
+                                extension = ext,
+                                fileType = fileType,
+                                sizeBytes = size,
+                                dateModified = if (dateMod > 0) dateMod else System.currentTimeMillis(),
+                                filePath = filePath ?: ""
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 2. Direct folder scan in public & app storage directories
+        val targetDirs = listOfNotNull(
+            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
+            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+            context.getExternalFilesDir(null),
+            context.filesDir
         )
 
-        documentDao.insertDocuments(samples)
+        val validExtensions = setOf("pdf", "doc", "docx", "xls", "xlsx", "csv", "ppt", "pptx", "txt")
+
+        for (dir in targetDirs) {
+            try {
+                if (dir.exists() && dir.isDirectory) {
+                    dir.walkTopDown().maxDepth(3).filter { file ->
+                        file.isFile && file.extension.lowercase() in validExtensions
+                    }.forEach { file ->
+                        val uriStr = Uri.fromFile(file).toString()
+                        if (!foundUris.contains(uriStr)) {
+                            foundUris.add(uriStr)
+                            val ext = file.extension.lowercase()
+                            val fileType = when (ext) {
+                                "pdf" -> DocumentFileType.PDF
+                                "doc", "docx" -> DocumentFileType.WORD
+                                "xls", "xlsx", "csv" -> DocumentFileType.EXCEL
+                                "ppt", "pptx" -> DocumentFileType.POWERPOINT
+                                "txt" -> DocumentFileType.TEXT
+                                else -> DocumentFileType.OTHER
+                            }
+                            scannedDocs.add(
+                                DocumentItem(
+                                    uriString = uriStr,
+                                    displayName = file.name,
+                                    extension = ext,
+                                    fileType = fileType,
+                                    sizeBytes = file.length(),
+                                    dateModified = file.lastModified(),
+                                    filePath = file.absolutePath
+                                )
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        if (scannedDocs.isNotEmpty()) {
+            documentDao.insertDocuments(scannedDocs)
+        }
+        return@withContext scannedDocs
+    }
+
+    suspend fun importDocumentFromUri(uri: Uri): DocumentItem = withContext(Dispatchers.IO) {
+        var displayName = uri.lastPathSegment?.substringAfterLast('/') ?: "Document"
+        var sizeBytes = 0L
+
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (cursor.moveToFirst()) {
+                    if (nameIndex != -1) displayName = cursor.getString(nameIndex)
+                    if (sizeIndex != -1) sizeBytes = cursor.getLong(sizeIndex)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val ext = displayName.substringAfterLast('.', "").lowercase()
+        val fileType = when (ext) {
+            "pdf" -> DocumentFileType.PDF
+            "doc", "docx" -> DocumentFileType.WORD
+            "xls", "xlsx", "csv" -> DocumentFileType.EXCEL
+            "ppt", "pptx" -> DocumentFileType.POWERPOINT
+            "txt" -> DocumentFileType.TEXT
+            else -> DocumentFileType.OTHER
+        }
+
+        val item = DocumentItem(
+            uriString = uri.toString(),
+            displayName = displayName,
+            extension = ext,
+            fileType = fileType,
+            sizeBytes = sizeBytes,
+            dateModified = System.currentTimeMillis(),
+            isRecent = true,
+            lastOpenedTime = System.currentTimeMillis()
+        )
+
+        documentDao.insertDocument(item)
+        return@withContext item
     }
 }
