@@ -75,6 +75,8 @@ import com.example.ui.theme.ColorWordBlue
 import com.example.ui.theme.IndigoSecondary
 import com.example.ui.theme.PrimaryBlue600
 
+import android.widget.Toast
+import androidx.compose.runtime.LaunchedEffect
 import android.os.Build
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
@@ -120,7 +122,17 @@ fun HomeScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        hasStoragePermission = perms.values.any { it }
+        val granted = perms.values.any { it }
+        hasStoragePermission = granted
+        if (granted) {
+            viewModel.scanStorage()
+        }
+    }
+
+    LaunchedEffect(hasStoragePermission) {
+        if (hasStoragePermission) {
+            viewModel.scanStorage()
+        }
     }
 
     // SAF Open File Launcher
@@ -232,7 +244,9 @@ fun HomeScreen(
 
                     // Scan Document Button
                     Button(
-                        onClick = onNavigateToScanner,
+                        onClick = {
+                            Toast.makeText(context, "Coming Soon: Document Scanner feature is coming soon!", Toast.LENGTH_SHORT).show()
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp)
@@ -359,7 +373,9 @@ fun HomeScreen(
                                 title = "Scan Doc",
                                 icon = Icons.Outlined.QrCodeScanner,
                                 brandColor = IndigoSecondary,
-                                onClick = onNavigateToScanner
+                                onClick = {
+                                    Toast.makeText(context, "Coming Soon: Document Scanner feature is coming soon!", Toast.LENGTH_SHORT).show()
+                                }
                             )
                         }
                         item {

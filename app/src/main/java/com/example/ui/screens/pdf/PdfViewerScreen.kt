@@ -84,6 +84,14 @@ import com.example.ui.theme.StarGold
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Save
+import com.example.data.model.DocumentFileType
+import com.example.data.model.DocumentItem
+import com.example.ui.components.SaveAsDialog
+import java.io.File
+import java.io.FileOutputStream
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PdfViewerScreen(
@@ -96,6 +104,10 @@ fun PdfViewerScreen(
     val db = remember { DocuProDatabase.getDatabase(context) }
     val repository = remember { DocumentRepository(context, db.documentDao(), db.annotationDao(), db.scanDao()) }
 
+    var pdfFileName by remember {
+        mutableStateOf(Uri.parse(documentUri).lastPathSegment?.substringAfterLast('/') ?: "Document.pdf")
+    }
+    var showSaveAsDialog by remember { mutableStateOf(false) }
     var pageCount by remember { mutableIntStateOf(1) }
     var pageBitmaps by remember { mutableStateOf<Map<Int, Bitmap>>(emptyMap()) }
     var isAnnotationMode by remember { mutableStateOf(false) }
@@ -134,6 +146,47 @@ fun PdfViewerScreen(
             if (bmp != null) map[i] = bmp
         }
         pageBitmaps = map
+    }
+
+    if (showSaveAsDialog) {
+        SaveAsDialog(
+            initialName = pdfFileName,
+            onDismiss = { showSaveAsDialog = false },
+            onSave = { newName ->
+                showSaveAsDialog = false
+                scope.launch {
+                    try {
+                        val docsDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                        val targetFile = File(docsDir, newName)
+                        val targetUri = Uri.fromFile(targetFile)
+
+                        // Copy PDF bytes from input stream to target file
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            FileOutputStream(targetFile).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+
+                        pdfFileName = newName
+                        val doc = DocumentItem(
+                            uriString = targetUri.toString(),
+                            displayName = newName,
+                            extension = "pdf",
+                            fileType = DocumentFileType.PDF,
+                            sizeBytes = targetFile.length().coerceAtLeast(100L),
+                            dateModified = System.currentTimeMillis(),
+                            filePath = targetFile.absolutePath,
+                            isRecent = true,
+                            lastOpenedTime = System.currentTimeMillis()
+                        )
+                        repository.insertDocument(doc)
+                        Toast.makeText(context, "Saved as '$newName'", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error saving PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -178,6 +231,9 @@ fun PdfViewerScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showSaveAsDialog = true }) {
+                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save As", tint = ColorPdfRed)
+                        }
                         IconButton(onClick = { isSearching = !isSearching }) {
                             Icon(imageVector = Icons.Filled.Search, contentDescription = "Search")
                         }

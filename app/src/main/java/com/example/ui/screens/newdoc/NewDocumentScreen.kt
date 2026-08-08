@@ -42,6 +42,7 @@ import com.example.data.engine.PdfDocumentEngine
 import com.example.data.model.DocumentFileType
 import com.example.data.model.DocumentItem
 import com.example.data.repository.DocumentRepository
+import android.widget.Toast
 import com.example.ui.components.TemplateCard
 import com.example.ui.theme.ColorExcelGreen
 import com.example.ui.theme.ColorPdfRed
@@ -180,7 +181,10 @@ fun NewDocumentScreen(
                     description = "Pre-formatted resume layout with experience sections",
                     icon = Icons.Outlined.Badge,
                     brandColor = ColorWordBlue,
-                    onClick = { createAndOpen("Executive_Resume", "docx", DocumentFileType.WORD, "FULL NAME\nSenior Executive & Product Specialist\n\nWORK EXPERIENCE\n• Lead Product Engineer (2022 - Present)\n• Senior Systems Developer (2018 - 2022)\n\nEDUCATION\nB.S. Computer Science & Software Engineering") }
+                    isComingSoon = true,
+                    onClick = {
+                        Toast.makeText(context, "Coming Soon: Professional Resume Templates will be available in the next release!", Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
             item {
@@ -189,7 +193,10 @@ fun NewDocumentScreen(
                     description = "Formal job application cover letter",
                     icon = Icons.Outlined.Article,
                     brandColor = ColorWordBlue,
-                    onClick = { createAndOpen("Cover_Letter", "docx", DocumentFileType.WORD, "Date: August 8, 2026\nTo: Hiring Committee\n\nDear Hiring Team,\n\nI am writing to express my strong interest in the open leadership position...") }
+                    isComingSoon = true,
+                    onClick = {
+                        Toast.makeText(context, "Coming Soon: Cover Letter Templates will be available in the next release!", Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
             item {
@@ -198,7 +205,10 @@ fun NewDocumentScreen(
                     description = "Itemized payment request and total calculation",
                     icon = Icons.Outlined.ReceiptLong,
                     brandColor = ColorExcelGreen,
-                    onClick = { createAndOpen("Business_Invoice", "csv", DocumentFileType.EXCEL, "Item Description,Hours,Rate ($),Amount ($)\nSoftware Development,40,125.00,5000.00\nUI/UX Design,15,95.00,1425.00\nTotal Due,,,6425.00") }
+                    isComingSoon = true,
+                    onClick = {
+                        Toast.makeText(context, "Coming Soon: Business Invoice Templates will be available in the next release!", Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
         }

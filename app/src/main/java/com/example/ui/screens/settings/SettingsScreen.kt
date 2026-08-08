@@ -58,12 +58,93 @@ import com.example.ui.theme.IndigoSecondary
 import com.example.ui.theme.PrimaryBlue600
 import com.example.ui.theme.StarGold
 
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
     var rememberReadingPosition by remember { mutableStateOf(true) }
     var autoEnhanceScans by remember { mutableStateOf(true) }
     var biometricLockEnabled by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+
+    if (showPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.Security,
+                    contentDescription = "Privacy Policy",
+                    tint = PrimaryBlue600
+                )
+            },
+            title = {
+                Text(
+                    text = "DocuPro Privacy Policy",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = "100% On-Device Local Processing",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "DocuPro operates entirely offline on your device. Your PDF, Word, Excel, PowerPoint, and Text files are rendered and edited locally. No file contents or annotations are ever transmitted or uploaded to remote cloud servers.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Storage & Media Permissions",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "DocuPro requests storage access permissions strictly to discover, open, edit, and organize document files on your device upon explicit user request.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Data Security & Ownership",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "You retain 100% full ownership of all your documents and data. No analytics tracking or third-party advertising frameworks are integrated.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showPrivacyDialog = false },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("I Understand", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -198,7 +279,8 @@ fun SettingsScreen() {
                     SettingsClickableRow(
                         icon = Icons.Outlined.Security,
                         title = "Offline Privacy Guarantee",
-                        subtitle = "100% Local processing. Zero unauthorized uploads"
+                        subtitle = "100% Local processing. Zero unauthorized uploads",
+                        onClick = { showPrivacyDialog = true }
                     )
                 }
             }
@@ -229,7 +311,8 @@ fun SettingsScreen() {
                     SettingsClickableRow(
                         icon = Icons.Outlined.Lock,
                         title = "Privacy Policy",
-                        subtitle = "Read DocuPro privacy terms"
+                        subtitle = "Read DocuPro privacy terms",
+                        onClick = { showPrivacyDialog = true }
                     )
                 }
             }
@@ -278,6 +361,7 @@ private fun SettingsClickableRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

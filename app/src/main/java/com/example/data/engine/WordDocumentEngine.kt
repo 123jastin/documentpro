@@ -54,16 +54,31 @@ class WordDocumentEngine : DocumentEngine {
                         if (entry.name == "word/document.xml") {
                             val reader = BufferedReader(InputStreamReader(zip, "UTF-8"))
                             val rawXml = reader.readText()
-                            // Extract text content inside <w:t> tags
-                            val regex = "<w:t[^>]*>(.*?)</w:t>".toRegex(RegexOption.DOT_MATCHES_ALL)
-                            val matches = regex.findAll(rawXml)
-                            for (match in matches) {
-                                val text = match.groupValues[1]
-                                    .replace("&lt;", "<")
-                                    .replace("&gt;", ">")
-                                    .replace("&amp;", "&")
-                                    .replace("&quot;", "\"")
-                                stringBuilder.append(text).append(" ")
+
+                            // Parse paragraph by paragraph <w:p> to respect document structure & design
+                            val paragraphRegex = "<w:p[^>]*>(.*?)</w:p>".toRegex(RegexOption.DOT_MATCHES_ALL)
+                            val pMatches = paragraphRegex.findAll(rawXml)
+
+                            for (pMatch in pMatches) {
+                                val pXml = pMatch.groupValues[1]
+                                val pTextBuilder = StringBuilder()
+
+                                // Extract text inside <w:t> tags within this paragraph
+                                val tRegex = "<w:t[^>]*>(.*?)</w:t>".toRegex(RegexOption.DOT_MATCHES_ALL)
+                                for (tMatch in tRegex.findAll(pXml)) {
+                                    val text = tMatch.groupValues[1]
+                                        .replace("&lt;", "<")
+                                        .replace("&gt;", ">")
+                                        .replace("&amp;", "&")
+                                        .replace("&quot;", "\"")
+                                        .replace("&apos;", "'")
+                                    pTextBuilder.append(text)
+                                }
+
+                                val pText = pTextBuilder.toString().trim()
+                                if (pText.isNotEmpty()) {
+                                    stringBuilder.append(pText).append("\n\n")
+                                }
                             }
                             break
                         }
@@ -72,7 +87,7 @@ class WordDocumentEngine : DocumentEngine {
                 }
             }
         } catch (e: Exception) {
-            // Fallback: simple text stream reading if plain text fallback
+            // Fallback: simple text stream reading
             try {
                 context.contentResolver.openInputStream(uri)?.use { stream ->
                     BufferedReader(InputStreamReader(stream)).use { br ->
@@ -83,8 +98,8 @@ class WordDocumentEngine : DocumentEngine {
                 stringBuilder.append("Content preview unavailable for this document.")
             }
         }
-        stringBuilder.toString().ifBlank {
-            "DocuPro Document\n\nWelcome to your Word Document reader and editor.\nSelect text to apply styling or edit text directly."
+        stringBuilder.toString().trim().ifBlank {
+            "DocuPro Executive Document\n\nWelcome to your Word Document reader and editor.\nSelect text to apply formatting, insert images, or edit text directly."
         }
     }
 
