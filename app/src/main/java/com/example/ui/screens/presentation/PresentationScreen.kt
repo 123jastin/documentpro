@@ -54,9 +54,19 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.data.db.DocuProDatabase
+import com.example.data.model.DocumentFileType
+import com.example.data.model.DocumentItem
+import com.example.data.repository.DocumentRepository
 import com.example.data.engine.PresentationEngine
 import com.example.data.engine.PresentationModel
+import com.example.ui.components.SaveAsDialog
 import com.example.ui.theme.ColorPptOrange
+import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,13 +75,17 @@ fun PresentationScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val engine = remember { PresentationEngine() }
+    val db = remember { DocuProDatabase.getDatabase(context) }
+    val repository = remember { DocumentRepository(context, db.documentDao(), db.annotationDao(), db.scanDao()) }
     val uri = remember(documentUri) { Uri.parse(documentUri) }
 
     var presentationModel by remember { mutableStateOf<PresentationModel?>(null) }
     var currentSlideIndex by remember { mutableIntStateOf(0) }
     var showNotes by remember { mutableStateOf(false) }
     var isFullScreen by remember { mutableStateOf(false) }
+    var showSaveAsDialog by remember { mutableStateOf(false) }
     var fileName by remember { mutableStateOf("Presentation.pptx") }
 
     LaunchedEffect(documentUri) {
@@ -87,6 +101,42 @@ fun PresentationScreen(
     val model = presentationModel ?: engine.createSamplePresentation("Presentation.pptx")
     val slides = model.slides
     val currentSlide = slides.getOrNull(currentSlideIndex) ?: slides.first()
+
+    if (showSaveAsDialog) {
+        SaveAsDialog(
+            initialName = fileName,
+            onDismiss = { showSaveAsDialog = false },
+            onSave = { newName ->
+                showSaveAsDialog = false
+                scope.launch {
+                    val docsDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                    val targetFile = File(docsDir, newName)
+                    val targetUri = Uri.fromFile(targetFile)
+
+                    val sb = StringBuilder()
+                    slides.forEachIndexed { i, s ->
+                        sb.append("Slide ${i + 1}: ${s.title}\n${s.bodyText}\n\n")
+                    }
+                    targetFile.writeText(sb.toString())
+
+                    fileName = newName
+                    val doc = DocumentItem(
+                        uriString = targetUri.toString(),
+                        displayName = newName,
+                        extension = "pptx",
+                        fileType = DocumentFileType.POWERPOINT,
+                        sizeBytes = targetFile.length().coerceAtLeast(100L),
+                        dateModified = System.currentTimeMillis(),
+                        filePath = targetFile.absolutePath,
+                        isRecent = true,
+                        lastOpenedTime = System.currentTimeMillis()
+                    )
+                    repository.insertDocument(doc)
+                    Toast.makeText(context, "Saved as '$newName'", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -111,6 +161,9 @@ fun PresentationScreen(
                     actions = {
                         IconButton(onClick = { isFullScreen = true }) {
                             Icon(imageVector = Icons.Outlined.Fullscreen, contentDescription = "Full Screen Slide")
+                        }
+                        IconButton(onClick = { showSaveAsDialog = true }) {
+                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save As", tint = ColorPptOrange)
                         }
                         IconButton(onClick = { showNotes = !showNotes }) {
                             Icon(

@@ -81,7 +81,7 @@ fun SettingsScreen() {
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .testTag("settings_screen_column")
         ) {
-            // DocuPro Premium Subscription Card
+            // DocuPro PDF Tools Suite Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -98,33 +98,22 @@ fun SettingsScreen() {
                                 .background(Color.White.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(imageVector = Icons.Filled.Star, contentDescription = "Premium", tint = StarGold)
+                            Icon(imageVector = Icons.Filled.Star, contentDescription = "PDF Tools", tint = StarGold)
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "DocuPro Premium",
+                                text = "DocuPro PDF Suite",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                             Text(
-                                text = "Unlock OCR text recognition & PDF batch tools",
+                                text = "Merge, Split, Compress & Reorder PDF Pages",
                                 fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.85f)
                             )
                         }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { /* Upgrade Flow */ },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = StarGold, contentColor = Color.Black)
-                    ) {
-                        Icon(imageVector = Icons.Outlined.AutoAwesome, contentDescription = "Upgrade", tint = Color.Black)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Upgrade to Pro", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }

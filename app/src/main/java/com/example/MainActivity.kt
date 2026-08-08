@@ -41,6 +41,12 @@ import com.example.ui.screens.starred.StarredScreen
 import com.example.ui.screens.text.TextEditorScreen
 import com.example.ui.theme.DocuProTheme
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import com.example.data.db.DocuProDatabase
+import com.example.data.repository.DocumentRepository
+import com.example.ui.screens.pdftools.PdfToolsScreen
+
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,6 +65,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun DocuProApp(initialUri: Uri? = null) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -81,6 +88,18 @@ fun DocuProApp(initialUri: Uri? = null) {
             DocumentFileType.TEXT -> navController.navigate("text_editor/$encodedUri")
             DocumentFileType.IMAGE -> navController.navigate("pdf_viewer/$encodedUri")
             else -> navController.navigate("text_editor/$encodedUri")
+        }
+    }
+
+    // Auto open document when DocuPro is recommended / launched via Intent
+    LaunchedEffect(initialUri) {
+        if (initialUri != null) {
+            val db = DocuProDatabase.getDatabase(context)
+            val repo = DocumentRepository(context, db.documentDao(), db.annotationDao(), db.scanDao())
+            val importedDoc = repo.importDocumentFromUri(initialUri)
+            if (importedDoc != null) {
+                routeToDocumentViewer(importedDoc)
+            }
         }
     }
 
@@ -117,6 +136,7 @@ fun DocuProApp(initialUri: Uri? = null) {
                         onNavigateToNewDoc = { navController.navigate(Screen.NewDocument.route) },
                         onNavigateToScanner = { navController.navigate(Screen.DocumentScanner.route) },
                         onNavigateToImageToPdf = { navController.navigate(Screen.ImageToPdf.route) },
+                        onNavigateToPdfTools = { toolIdx -> navController.navigate("pdf_tools/$toolIdx") },
                         onNavigateToSearch = { navController.navigate(Screen.Search.route) },
                         onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                         onNavigateToFilesCategory = { category ->
@@ -235,6 +255,27 @@ fun DocuProApp(initialUri: Uri? = null) {
                 // Image to PDF Converter
                 composable(Screen.ImageToPdf.route) {
                     ImageToPdfScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenDocument = { doc -> routeToDocumentViewer(doc) }
+                    )
+                }
+
+                // PDF Tools (Merge, Split, Compress, Reorder)
+                composable(Screen.PdfTools.route) {
+                    PdfToolsScreen(
+                        initialToolIndex = 0,
+                        onBack = { navController.popBackStack() },
+                        onOpenDocument = { doc -> routeToDocumentViewer(doc) }
+                    )
+                }
+
+                composable(
+                    route = "pdf_tools/{toolIndex}",
+                    arguments = listOf(navArgument("toolIndex") { type = NavType.IntType })
+                ) { backStackEntry ->
+                    val toolIdx = backStackEntry.arguments?.getInt("toolIndex") ?: 0
+                    PdfToolsScreen(
+                        initialToolIndex = toolIdx,
                         onBack = { navController.popBackStack() },
                         onOpenDocument = { doc -> routeToDocumentViewer(doc) }
                     )

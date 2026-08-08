@@ -128,15 +128,6 @@ fun NewDocumentScreen(
             }
             item {
                 TemplateCard(
-                    title = "Blank PDF",
-                    description = "Create a clean blank PDF canvas for annotations and notes",
-                    icon = Icons.Outlined.PictureAsPdf,
-                    brandColor = ColorPdfRed,
-                    onClick = { createAndOpen("Untitled_Document_${System.currentTimeMillis() % 10000}", "pdf", DocumentFileType.PDF) }
-                )
-            }
-            item {
-                TemplateCard(
                     title = "Blank Word Document",
                     description = "Create a new .docx formatted Word document",
                     icon = Icons.Outlined.Description,

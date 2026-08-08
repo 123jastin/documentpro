@@ -31,6 +31,7 @@ sealed class Screen(val route: String) {
 
     object DocumentScanner : Screen("scanner")
     object ImageToPdf : Screen("image_to_pdf")
+    object PdfTools : Screen("pdf_tools")
     object NewDocument : Screen("new_document")
     object Search : Screen("search")
 

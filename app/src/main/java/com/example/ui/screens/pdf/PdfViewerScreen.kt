@@ -2,10 +2,14 @@ package com.example.ui.screens.pdf
 
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,20 +32,11 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FormatColorFill
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.outlined.CropSquare
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Highlight
 import androidx.compose.material.icons.outlined.NoteAdd
-import androidx.compose.material.icons.outlined.ZoomIn
-import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -54,7 +47,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -70,11 +62,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -110,8 +102,14 @@ fun PdfViewerScreen(
     var selectedTool by remember { mutableStateOf(AnnotationType.PEN) }
     var activeColorHex by remember { mutableStateOf("#EF4444") }
     var strokeWidth by remember { mutableFloatStateOf(6f) }
-    var zoomScale by remember { mutableFloatStateOf(1.0f) }
-    var isFullScreen by remember { mutableStateOf(false) }
+
+    // Multi-touch two-finger pinch-to-zoom state
+    var scale by remember { mutableFloatStateOf(1.0f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+
+    // WPS style: controls overlay visibility (tap canvas to toggle bar visibility)
+    var showOverlayControls by remember { mutableStateOf(true) }
     var isBookmarked by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearching by remember { mutableStateOf(false) }
@@ -119,7 +117,6 @@ fun PdfViewerScreen(
     val listState = rememberLazyListState()
     val uri = remember(documentUri) { Uri.parse(documentUri) }
 
-    // Persistent Annotations List from Room
     var localAnnotations by remember { mutableStateOf<List<PdfAnnotation>>(emptyList()) }
 
     LaunchedEffect(documentUri) {
@@ -128,14 +125,12 @@ fun PdfViewerScreen(
             pageCount = result.data.pageCount
         }
 
-        // Load annotations
         val annotationsFlow = repository.getAnnotationsForDocument(documentUri)
         localAnnotations = annotationsFlow.first()
 
-        // Render page bitmaps asynchronously
         val map = mutableMapOf<Int, Bitmap>()
-        for (i in 0 until pageCount.coerceAtMost(10)) {
-            val bmp = pdfEngine.renderPageBitmap(context, uri, i)
+        for (i in 0 until pageCount.coerceAtMost(15)) {
+            val bmp = pdfEngine.renderPageBitmap(context, uri, i, targetWidth = 1200)
             if (bmp != null) map[i] = bmp
         }
         pageBitmaps = map
@@ -143,9 +138,13 @@ fun PdfViewerScreen(
 
     Scaffold(
         topBar = {
-            if (!isFullScreen) {
+            AnimatedVisibility(
+                visible = showOverlayControls,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
                 TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
                     title = {
                         if (isSearching) {
                             OutlinedTextField(
@@ -166,9 +165,9 @@ fun PdfViewerScreen(
                                     maxLines = 1
                                 )
                                 Text(
-                                    text = "Page ${listState.firstVisibleItemIndex + 1} of $pageCount",
+                                    text = "Page ${listState.firstVisibleItemIndex + 1} of $pageCount • Wide Screen",
                                     fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = ColorPdfRed
                                 )
                             }
                         }
@@ -179,9 +178,6 @@ fun PdfViewerScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { isFullScreen = true }) {
-                            Icon(imageVector = Icons.Outlined.Fullscreen, contentDescription = "Full Screen")
-                        }
                         IconButton(onClick = { isSearching = !isSearching }) {
                             Icon(imageVector = Icons.Filled.Search, contentDescription = "Search")
                         }
@@ -204,82 +200,59 @@ fun PdfViewerScreen(
             }
         },
         bottomBar = {
-            if (!isFullScreen) {
-                if (isAnnotationMode) {
-                    // Annotation Controls Toolbar
-                    BottomAppBar(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+            AnimatedVisibility(
+                visible = showOverlayControls && isAnnotationMode,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                BottomAppBar(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { selectedTool = AnnotationType.PEN }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Brush,
-                                    contentDescription = "Pen",
-                                    tint = if (selectedTool == AnnotationType.PEN) ColorPdfRed else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = { selectedTool = AnnotationType.HIGHLIGHT }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Highlight,
-                                    contentDescription = "Highlight",
-                                    tint = if (selectedTool == AnnotationType.HIGHLIGHT) StarGold else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = { selectedTool = AnnotationType.STICKY_NOTE }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.NoteAdd,
-                                    contentDescription = "Note",
-                                    tint = if (selectedTool == AnnotationType.STICKY_NOTE) PrimaryBlue600 else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = { selectedTool = AnnotationType.SHAPE_RECT }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.CropSquare,
-                                    contentDescription = "Shape",
-                                    tint = if (selectedTool == AnnotationType.SHAPE_RECT) PrimaryBlue600 else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf("#EF4444", "#3B82F6", "#10B981", "#F59E0B").forEach { hex ->
-                                    Box(
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(android.graphics.Color.parseColor(hex)))
-                                            .clickable { activeColorHex = hex }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    BottomAppBar(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { zoomScale = (zoomScale - 0.25f).coerceAtLeast(0.75f) }) {
-                                Icon(imageVector = Icons.Outlined.ZoomOut, contentDescription = "Zoom Out")
-                            }
-                            Text(
-                                text = "${(zoomScale * 100).toInt()}%",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
+                        IconButton(onClick = { selectedTool = AnnotationType.PEN }) {
+                            Icon(
+                                imageVector = Icons.Filled.Brush,
+                                contentDescription = "Pen",
+                                tint = if (selectedTool == AnnotationType.PEN) ColorPdfRed else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            IconButton(onClick = { zoomScale = (zoomScale + 0.25f).coerceAtMost(3.0f) }) {
-                                Icon(imageVector = Icons.Outlined.ZoomIn, contentDescription = "Zoom In")
+                        }
+                        IconButton(onClick = { selectedTool = AnnotationType.HIGHLIGHT }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Highlight,
+                                contentDescription = "Highlight",
+                                tint = if (selectedTool == AnnotationType.HIGHLIGHT) StarGold else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { selectedTool = AnnotationType.STICKY_NOTE }) {
+                            Icon(
+                                imageVector = Icons.Outlined.NoteAdd,
+                                contentDescription = "Note",
+                                tint = if (selectedTool == AnnotationType.STICKY_NOTE) PrimaryBlue600 else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { selectedTool = AnnotationType.SHAPE_RECT }) {
+                            Icon(
+                                imageVector = Icons.Outlined.CropSquare,
+                                contentDescription = "Shape",
+                                tint = if (selectedTool == AnnotationType.SHAPE_RECT) PrimaryBlue600 else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("#EF4444", "#3B82F6", "#10B981", "#F59E0B").forEach { hex ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(android.graphics.Color.parseColor(hex)))
+                                        .clickable { activeColorHex = hex }
+                                )
                             }
                         }
                     }
@@ -287,25 +260,58 @@ fun PdfViewerScreen(
             }
         }
     ) { innerPadding ->
+        // Fullscreen immersive canvas container
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(if (isFullScreen) PaddingValues(0.dp) else innerPadding)
-                .background(Color(0xFF121212))
-                .testTag("pdf_viewer_canvas_container")
+                .padding(innerPadding)
+                .background(Color(0xFF0F172A))
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { showOverlayControls = !showOverlayControls },
+                        onDoubleTap = {
+                            // Double tap resets pinch zoom
+                            scale = 1.0f
+                            offsetX = 0f
+                            offsetY = 0f
+                        }
+                    )
+                }
+                .pointerInput(Unit) {
+                    // Two-finger touch gesture for multi-touch pinch-to-zoom and pan
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(0.8f, 4.0f)
+                        if (scale > 1f) {
+                            offsetX += pan.x
+                            offsetY += pan.y
+                        } else {
+                            offsetX = 0f
+                            offsetY = 0f
+                        }
+                    }
+                }
+                .testTag("pdf_viewer_fullscreen_container")
         ) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offsetX,
+                        translationY = offsetY
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(pageCount) { pageIdx ->
                     val bmp = pageBitmaps[pageIdx]
                     Card(
                         modifier = Modifier
-                            .padding(vertical = if (isFullScreen) 4.dp else 12.dp, horizontal = if (isFullScreen) 0.dp else 16.dp)
+                            .padding(vertical = 4.dp)
                             .fillMaxWidth(),
-                        shape = if (isFullScreen) RoundedCornerShape(0.dp) else RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(0.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
                         if (bmp != null) {
@@ -345,31 +351,13 @@ fun PdfViewerScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(500.dp),
+                                    .height(550.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator(color = PrimaryBlue600)
+                                CircularProgressIndicator(color = ColorPdfRed)
                             }
                         }
                     }
-                }
-            }
-
-            // Floating Controls in Fullscreen Mode
-            if (isFullScreen) {
-                IconButton(
-                    onClick = { isFullScreen = false },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.6f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.FullscreenExit,
-                        contentDescription = "Exit Full Screen",
-                        tint = Color.White
-                    )
                 }
             }
         }

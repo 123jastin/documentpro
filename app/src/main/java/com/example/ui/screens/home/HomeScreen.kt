@@ -75,12 +75,22 @@ import com.example.ui.theme.ColorWordBlue
 import com.example.ui.theme.IndigoSecondary
 import com.example.ui.theme.PrimaryBlue600
 
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.compose.material.icons.filled.CallMerge
+import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Reorder
+import androidx.compose.material.icons.filled.Security
+
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
     onNavigateToNewDoc: () -> Unit,
     onNavigateToScanner: () -> Unit,
     onNavigateToImageToPdf: () -> Unit,
+    onNavigateToPdfTools: (Int) -> Unit = {},
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToFilesCategory: (DocumentFileType) -> Unit,
@@ -95,6 +105,23 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     var selectedBottomSheetDoc by remember { mutableStateOf<DocumentItem?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<DocumentFileType?>(null) }
+
+    // Runtime Storage Permission handling
+    var hasStoragePermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            }
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        hasStoragePermission = perms.values.any { it }
+    }
 
     // SAF Open File Launcher
     val openFileLauncher = rememberLauncherForActivityResult(
@@ -123,6 +150,63 @@ fun HomeScreen(
                 .testTag("home_screen_lazy_column"),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
+            // Storage Permission Card Banner if missing
+            if (!hasStoragePermission) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Security,
+                                contentDescription = "Storage Permission",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Storage Permission Required",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = "Allow DocuPro to access document files on your device",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        arrayOf(
+                                            android.Manifest.permission.READ_MEDIA_IMAGES
+                                        )
+                                    } else {
+                                        arrayOf(
+                                            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                                            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                        )
+                                    }
+                                    permissionLauncher.launch(permissions)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text(text = "Grant", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
             // Main Action Banner Cards
             item {
                 Row(
@@ -236,6 +320,38 @@ fun HomeScreen(
                                 icon = Icons.Outlined.Slideshow,
                                 brandColor = ColorPptOrange,
                                 onClick = { onNavigateToFilesCategory(DocumentFileType.POWERPOINT) }
+                            )
+                        }
+                        item {
+                            QuickActionButton(
+                                title = "Merge PDFs",
+                                icon = Icons.Filled.CallMerge,
+                                brandColor = ColorPdfRed,
+                                onClick = { onNavigateToPdfTools(0) }
+                            )
+                        }
+                        item {
+                            QuickActionButton(
+                                title = "Split PDFs",
+                                icon = Icons.Filled.CallSplit,
+                                brandColor = ColorPdfRed,
+                                onClick = { onNavigateToPdfTools(1) }
+                            )
+                        }
+                        item {
+                            QuickActionButton(
+                                title = "Compress PDF",
+                                icon = Icons.Filled.Compress,
+                                brandColor = ColorPdfRed,
+                                onClick = { onNavigateToPdfTools(2) }
+                            )
+                        }
+                        item {
+                            QuickActionButton(
+                                title = "Reorder Pages",
+                                icon = Icons.Filled.Reorder,
+                                brandColor = ColorPdfRed,
+                                onClick = { onNavigateToPdfTools(3) }
                             )
                         }
                         item {

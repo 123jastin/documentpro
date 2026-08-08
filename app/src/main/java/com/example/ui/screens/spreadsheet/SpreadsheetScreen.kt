@@ -52,10 +52,19 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.data.db.DocuProDatabase
+import com.example.data.model.DocumentFileType
+import com.example.data.model.DocumentItem
+import com.example.data.repository.DocumentRepository
 import com.example.data.engine.CellData
 import com.example.data.engine.SheetData
 import com.example.data.engine.SpreadsheetEngine
+import com.example.ui.components.SaveAsDialog
 import com.example.ui.theme.ColorExcelGreen
+import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,14 +73,18 @@ fun SpreadsheetScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val engine = remember { SpreadsheetEngine() }
+    val db = remember { DocuProDatabase.getDatabase(context) }
+    val repository = remember { DocumentRepository(context, db.documentDao(), db.annotationDao(), db.scanDao()) }
     val uri = remember(documentUri) { Uri.parse(documentUri) }
 
     var sheetData by remember { mutableStateOf<SheetData?>(null) }
     var selectedCell by remember { mutableStateOf<Pair<Int, Int>?>(Pair(0, 0)) }
     var formulaInput by remember { mutableStateOf("") }
-    var fileName by remember { mutableStateOf("Spreadsheet.xlsx") }
+    var fileName by remember { mutableStateOf("Spreadsheet.csv") }
     var isFullScreen by remember { mutableStateOf(false) }
+    var showSaveAsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(documentUri) {
         val result = engine.parseDocument(context, uri)
@@ -88,6 +101,47 @@ fun SpreadsheetScreen(
 
     fun getColName(colIdx: Int): String {
         return ('A' + colIdx).toString()
+    }
+
+    if (showSaveAsDialog) {
+        SaveAsDialog(
+            initialName = fileName,
+            onDismiss = { showSaveAsDialog = false },
+            onSave = { newName ->
+                showSaveAsDialog = false
+                scope.launch {
+                    val docsDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                    val targetFile = File(docsDir, newName)
+                    val targetUri = Uri.fromFile(targetFile)
+
+                    val sb = StringBuilder()
+                    for (r in 0 until currentSheet.rowCount) {
+                        val rowVals = mutableListOf<String>()
+                        for (c in 0 until currentSheet.columnCount) {
+                            val v = currentSheet.cells[Pair(r, c)]?.value ?: ""
+                            rowVals.add(v.replace(",", " "))
+                        }
+                        sb.append(rowVals.joinToString(",")).append("\n")
+                    }
+                    targetFile.writeText(sb.toString())
+
+                    fileName = newName
+                    val doc = DocumentItem(
+                        uriString = targetUri.toString(),
+                        displayName = newName,
+                        extension = "csv",
+                        fileType = DocumentFileType.EXCEL,
+                        sizeBytes = targetFile.length().coerceAtLeast(100L),
+                        dateModified = System.currentTimeMillis(),
+                        filePath = targetFile.absolutePath,
+                        isRecent = true,
+                        lastOpenedTime = System.currentTimeMillis()
+                    )
+                    repository.insertDocument(doc)
+                    Toast.makeText(context, "Saved as '$newName'", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -110,8 +164,8 @@ fun SpreadsheetScreen(
                         IconButton(onClick = { isFullScreen = true }) {
                             Icon(imageVector = Icons.Outlined.Fullscreen, contentDescription = "Full Screen")
                         }
-                        IconButton(onClick = { /* Save */ }) {
-                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = ColorExcelGreen)
+                        IconButton(onClick = { showSaveAsDialog = true }) {
+                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save As", tint = ColorExcelGreen)
                         }
                     }
                 )

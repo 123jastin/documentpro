@@ -141,6 +141,182 @@ class PdfDocumentEngine : DocumentEngine {
         }
     }
 
+    suspend fun mergePdfs(
+        context: Context,
+        pdfUris: List<Uri>,
+        outputFile: File
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val outputPdf = PdfDocument()
+            var globalPageNumber = 1
+
+            pdfUris.forEach { uri ->
+                val pfd = getFileDescriptor(context, uri)
+                if (pfd != null) {
+                    val renderer = PdfRenderer(pfd)
+                    for (p in 0 until renderer.pageCount) {
+                        val pdfPage = renderer.openPage(p)
+                        val w = pdfPage.width
+                        val h = pdfPage.height
+                        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                        val c = Canvas(bmp)
+                        c.drawColor(android.graphics.Color.WHITE)
+                        pdfPage.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        pdfPage.close()
+
+                        val pageInfo = PdfDocument.PageInfo.Builder(w, h, globalPageNumber++).create()
+                        val newPage = outputPdf.startPage(pageInfo)
+                        newPage.canvas.drawBitmap(bmp, 0f, 0f, null)
+                        outputPdf.finishPage(newPage)
+                        bmp.recycle()
+                    }
+                    renderer.close()
+                    pfd.close()
+                }
+            }
+
+            FileOutputStream(outputFile).use { out ->
+                outputPdf.writeTo(out)
+            }
+            outputPdf.close()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun splitPdf(
+        context: Context,
+        pdfUri: Uri,
+        splitPages: List<Int>, // 0-based page indices to extract into a new PDF
+        outputFile: File
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val pfd = getFileDescriptor(context, pdfUri) ?: return@withContext false
+            val renderer = PdfRenderer(pfd)
+            val outputPdf = PdfDocument()
+
+            splitPages.forEachIndexed { newIdx, originalIdx ->
+                if (originalIdx in 0 until renderer.pageCount) {
+                    val pdfPage = renderer.openPage(originalIdx)
+                    val w = pdfPage.width
+                    val h = pdfPage.height
+                    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val c = Canvas(bmp)
+                    c.drawColor(android.graphics.Color.WHITE)
+                    pdfPage.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    pdfPage.close()
+
+                    val pageInfo = PdfDocument.PageInfo.Builder(w, h, newIdx + 1).create()
+                    val page = outputPdf.startPage(pageInfo)
+                    page.canvas.drawBitmap(bmp, 0f, 0f, null)
+                    outputPdf.finishPage(page)
+                    bmp.recycle()
+                }
+            }
+
+            renderer.close()
+            pfd.close()
+
+            FileOutputStream(outputFile).use { out ->
+                outputPdf.writeTo(out)
+            }
+            outputPdf.close()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun compressPdf(
+        context: Context,
+        pdfUri: Uri,
+        outputFile: File,
+        targetWidthScale: Float = 0.7f // scale down dimensions/resolution for size reduction
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val pfd = getFileDescriptor(context, pdfUri) ?: return@withContext false
+            val renderer = PdfRenderer(pfd)
+            val outputPdf = PdfDocument()
+
+            for (p in 0 until renderer.pageCount) {
+                val pdfPage = renderer.openPage(p)
+                val targetW = (pdfPage.width * targetWidthScale).toInt().coerceAtLeast(300)
+                val targetH = (pdfPage.height * targetWidthScale).toInt().coerceAtLeast(400)
+
+                val bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.RGB_565)
+                val c = Canvas(bmp)
+                c.drawColor(android.graphics.Color.WHITE)
+                pdfPage.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                pdfPage.close()
+
+                val pageInfo = PdfDocument.PageInfo.Builder(targetW, targetH, p + 1).create()
+                val page = outputPdf.startPage(pageInfo)
+                page.canvas.drawBitmap(bmp, 0f, 0f, null)
+                outputPdf.finishPage(page)
+                bmp.recycle()
+            }
+
+            renderer.close()
+            pfd.close()
+
+            FileOutputStream(outputFile).use { out ->
+                outputPdf.writeTo(out)
+            }
+            outputPdf.close()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun reorderPdfPages(
+        context: Context,
+        pdfUri: Uri,
+        newPageOrder: List<Int>, // 0-based page index order
+        outputFile: File
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val pfd = getFileDescriptor(context, pdfUri) ?: return@withContext false
+            val renderer = PdfRenderer(pfd)
+            val outputPdf = PdfDocument()
+
+            newPageOrder.forEachIndexed { newIdx, originalIdx ->
+                if (originalIdx in 0 until renderer.pageCount) {
+                    val pdfPage = renderer.openPage(originalIdx)
+                    val w = pdfPage.width
+                    val h = pdfPage.height
+                    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val c = Canvas(bmp)
+                    c.drawColor(android.graphics.Color.WHITE)
+                    pdfPage.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    pdfPage.close()
+
+                    val pageInfo = PdfDocument.PageInfo.Builder(w, h, newIdx + 1).create()
+                    val page = outputPdf.startPage(pageInfo)
+                    page.canvas.drawBitmap(bmp, 0f, 0f, null)
+                    outputPdf.finishPage(page)
+                    bmp.recycle()
+                }
+            }
+
+            renderer.close()
+            pfd.close()
+
+            FileOutputStream(outputFile).use { out ->
+                outputPdf.writeTo(out)
+            }
+            outputPdf.close()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
     private fun getFileDescriptor(context: Context, uri: Uri): ParcelFileDescriptor? {
         return try {
             if (uri.scheme == "file") {

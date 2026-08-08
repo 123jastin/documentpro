@@ -47,10 +47,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import com.example.data.db.DocuProDatabase
+import com.example.data.model.DocumentFileType
+import com.example.data.model.DocumentItem
+import com.example.data.repository.DocumentRepository
 import com.example.data.engine.TextDocumentEngine
+import com.example.ui.components.SaveAsDialog
 import com.example.ui.theme.ColorTextGray
 import com.example.ui.theme.PrimaryBlue600
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,11 +68,14 @@ fun TextEditorScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val engine = remember { TextDocumentEngine() }
+    val db = remember { DocuProDatabase.getDatabase(context) }
+    val repository = remember { DocumentRepository(context, db.documentDao(), db.annotationDao(), db.scanDao()) }
     val uri = remember(documentUri) { Uri.parse(documentUri) }
 
     var textContent by remember { mutableStateOf("") }
     var fileName by remember { mutableStateOf("Note.txt") }
     var isFullScreen by remember { mutableStateOf(false) }
+    var showSaveAsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(documentUri) {
         val result = engine.parseDocument(context, uri)
@@ -77,6 +87,41 @@ fun TextEditorScreen(
 
     val lines = textContent.lines()
     val wordCount = if (textContent.isBlank()) 0 else textContent.split("\\s+".toRegex()).size
+
+    if (showSaveAsDialog) {
+        SaveAsDialog(
+            initialName = fileName,
+            onDismiss = { showSaveAsDialog = false },
+            onSave = { newName ->
+                showSaveAsDialog = false
+                scope.launch {
+                    val docsDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                    val targetFile = File(docsDir, newName)
+                    val targetUri = Uri.fromFile(targetFile)
+
+                    val saveOk = engine.saveTextToUri(context, targetUri, textContent)
+                    if (saveOk) {
+                        fileName = newName
+                        val doc = DocumentItem(
+                            uriString = targetUri.toString(),
+                            displayName = newName,
+                            extension = "txt",
+                            fileType = DocumentFileType.TEXT,
+                            sizeBytes = targetFile.length().coerceAtLeast(100L),
+                            dateModified = System.currentTimeMillis(),
+                            filePath = targetFile.absolutePath,
+                            isRecent = true,
+                            lastOpenedTime = System.currentTimeMillis()
+                        )
+                        repository.insertDocument(doc)
+                        Toast.makeText(context, "Saved as '$newName'", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Error saving document", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -98,12 +143,8 @@ fun TextEditorScreen(
                         IconButton(onClick = { isFullScreen = true }) {
                             Icon(imageVector = Icons.Outlined.Fullscreen, contentDescription = "Full Screen")
                         }
-                        IconButton(onClick = {
-                            scope.launch {
-                                engine.saveTextToUri(context, uri, textContent)
-                            }
-                        }) {
-                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save", tint = PrimaryBlue600)
+                        IconButton(onClick = { showSaveAsDialog = true }) {
+                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save As", tint = PrimaryBlue600)
                         }
                     }
                 )
