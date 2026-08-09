@@ -88,6 +88,18 @@ import com.example.data.repository.DocumentRepository
 import com.example.ui.theme.ColorPdfRed
 import com.example.ui.theme.PrimaryBlue600
 import com.example.ads.WatchAdDialog
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.LowPriority
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -128,6 +140,8 @@ fun PdfToolsScreen(
     var reorderUri by remember { mutableStateOf<Uri?>(null) }
     val pageThumbnails = remember { mutableStateListOf<android.graphics.Bitmap>() }
     val pageOrder = remember { mutableStateListOf<Int>() }
+    var pageToMoveIndex by remember { mutableStateOf<Int?>(null) }
+    var targetPositionInput by remember { mutableStateOf("") }
 
     val mergePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -497,13 +511,13 @@ fun PdfToolsScreen(
                         }
                     }
 
-                    // TAB 3: REORDER PAGES
+                    // TAB 3: REORDER PAGES / ORGANIZE PAGES
                     3 -> {
                         Column(
                             modifier = Modifier.fillMaxSize().padding(16.dp)
                         ) {
                             Text(
-                                text = "Rearrange page order or remove pages from your PDF.",
+                                text = "Drag pages or use Move Position to reorder PDF pages to any position.",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -518,8 +532,68 @@ fun PdfToolsScreen(
                                 Text(text = if (reorderUri != null) "Change PDF File" else "Select PDF to Reorder Pages", fontWeight = FontWeight.Bold)
                             }
 
+                            // Move to position dialog
+                            if (pageToMoveIndex != null) {
+                                val currentIdx = pageToMoveIndex!!
+                                AlertDialog(
+                                    onDismissRequest = { pageToMoveIndex = null },
+                                    title = { Text(text = "Move Page ${currentIdx + 1} to Position", fontWeight = FontWeight.Bold) },
+                                    text = {
+                                        Column {
+                                            Text("Enter target position number (1 to ${pageOrder.size}):", fontSize = 13.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            OutlinedTextField(
+                                                value = targetPositionInput,
+                                                onValueChange = { targetPositionInput = it },
+                                                placeholder = { Text("e.g. 1") },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    },
+                                    confirmButton = {
+                                        Button(
+                                            onClick = {
+                                                val targetPos = targetPositionInput.toIntOrNull()
+                                                if (targetPos != null && targetPos in 1..pageOrder.size) {
+                                                    val pageNum = pageOrder.removeAt(currentIdx)
+                                                    pageOrder.add(targetPos - 1, pageNum)
+                                                    Toast.makeText(context, "Page moved to position $targetPos", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Invalid position range (1..${pageOrder.size})", Toast.LENGTH_SHORT).show()
+                                                }
+                                                pageToMoveIndex = null
+                                                targetPositionInput = ""
+                                            }
+                                        ) {
+                                            Text("Move Page")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { pageToMoveIndex = null }) {
+                                            Text("Cancel")
+                                        }
+                                    }
+                                )
+                            }
+
                             if (pageThumbnails.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(12.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${pageOrder.size} Pages loaded • Drag handle to move",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = PrimaryBlue600
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+
                                 LazyVerticalGrid(
                                     columns = GridCells.Fixed(2),
                                     modifier = Modifier.weight(1f),
@@ -528,25 +602,109 @@ fun PdfToolsScreen(
                                 ) {
                                     itemsIndexed(pageOrder) { gridIndex, originalPageIndex ->
                                         val bmp = pageThumbnails.getOrNull(originalPageIndex)
+
+                                        var dragAccumulatedY by remember { mutableStateOf(0f) }
+
                                         Card(
-                                            modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .border(1.dp, PrimaryBlue600.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
                                             shape = RoundedCornerShape(12.dp),
                                             colors = CardDefaults.cardColors(containerColor = Color.White)
                                         ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Column(
+                                                modifier = Modifier.padding(8.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                // Page Header badge with Drag Indicator
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(PrimaryBlue600.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                                        .pointerInput(gridIndex) {
+                                                            detectDragGestures(
+                                                                onDragEnd = { dragAccumulatedY = 0f },
+                                                                onDragCancel = { dragAccumulatedY = 0f }
+                                                            ) { change, dragAmount ->
+                                                                change.consume()
+                                                                dragAccumulatedY += dragAmount.y
+                                                                if (dragAccumulatedY < -60f && gridIndex > 0) {
+                                                                    val temp = pageOrder[gridIndex]
+                                                                    pageOrder[gridIndex] = pageOrder[gridIndex - 1]
+                                                                    pageOrder[gridIndex - 1] = temp
+                                                                    dragAccumulatedY = 0f
+                                                                } else if (dragAccumulatedY > 60f && gridIndex < pageOrder.size - 1) {
+                                                                    val temp = pageOrder[gridIndex]
+                                                                    pageOrder[gridIndex] = pageOrder[gridIndex + 1]
+                                                                    pageOrder[gridIndex + 1] = temp
+                                                                    dragAccumulatedY = 0f
+                                                                }
+                                                            }
+                                                        }
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.DragHandle,
+                                                            contentDescription = "Drag Handle",
+                                                            tint = PrimaryBlue600,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(
+                                                            text = "Page ${gridIndex + 1}",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = PrimaryBlue600
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = "Drag",
+                                                        fontSize = 10.sp,
+                                                        color = Color.Gray,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.height(6.dp))
+
                                                 if (bmp != null) {
                                                     Image(
                                                         bitmap = bmp.asImageBitmap(),
                                                         contentDescription = "Page ${gridIndex + 1}",
-                                                        modifier = Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(8.dp))
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(130.dp)
+                                                            .clip(RoundedCornerShape(8.dp))
                                                     )
                                                 }
+
                                                 Spacer(modifier = Modifier.height(6.dp))
-                                                Text(text = "Page ${gridIndex + 1}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+
+                                                // Action Row: Move To Position button, Up/Down, Delete
                                                 Row(
                                                     horizontalArrangement = Arrangement.SpaceEvenly,
-                                                    modifier = Modifier.fillMaxWidth()
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
+                                                    // Move To Position Button
+                                                    IconButton(
+                                                        onClick = {
+                                                            pageToMoveIndex = gridIndex
+                                                            targetPositionInput = (gridIndex + 1).toString()
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.SwapVert,
+                                                            contentDescription = "Move to Position",
+                                                            tint = PrimaryBlue600,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+
                                                     IconButton(
                                                         onClick = {
                                                             if (gridIndex > 0) {
@@ -555,10 +713,16 @@ fun PdfToolsScreen(
                                                                 pageOrder[gridIndex - 1] = temp
                                                             }
                                                         },
-                                                        enabled = gridIndex > 0
+                                                        enabled = gridIndex > 0,
+                                                        modifier = Modifier.size(28.dp)
                                                     ) {
-                                                        Icon(imageVector = Icons.Filled.ArrowUpward, contentDescription = "Move Up")
+                                                        Icon(
+                                                            imageVector = Icons.Filled.ArrowUpward,
+                                                            contentDescription = "Move Up",
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
                                                     }
+
                                                     IconButton(
                                                         onClick = {
                                                             if (gridIndex < pageOrder.size - 1) {
@@ -567,18 +731,30 @@ fun PdfToolsScreen(
                                                                 pageOrder[gridIndex + 1] = temp
                                                             }
                                                         },
-                                                        enabled = gridIndex < pageOrder.size - 1
+                                                        enabled = gridIndex < pageOrder.size - 1,
+                                                        modifier = Modifier.size(28.dp)
                                                     ) {
-                                                        Icon(imageVector = Icons.Filled.ArrowDownward, contentDescription = "Move Down")
+                                                        Icon(
+                                                            imageVector = Icons.Filled.ArrowDownward,
+                                                            contentDescription = "Move Down",
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
                                                     }
+
                                                     IconButton(
                                                         onClick = {
                                                             if (pageOrder.size > 1) {
                                                                 pageOrder.removeAt(gridIndex)
                                                             }
-                                                        }
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
                                                     ) {
-                                                        Icon(imageVector = Icons.Filled.Delete, contentDescription = "Delete Page", tint = Color.Red)
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Delete,
+                                                            contentDescription = "Delete Page",
+                                                            tint = Color.Red,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
                                                     }
                                                 }
                                             }
@@ -589,27 +765,29 @@ fun PdfToolsScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
                                     onClick = {
-                                        scope.launch {
-                                            isLoading = true
-                                            val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
-                                            val outFile = File(pdfDir, "Reordered_${System.currentTimeMillis() % 10000}.pdf")
-                                            val success = pdfEngine.reorderPdfPages(context, reorderUri!!, pageOrder, outFile)
-                                            isLoading = false
-                                            if (success) {
-                                                val doc = DocumentItem(
-                                                    uriString = Uri.fromFile(outFile).toString(),
-                                                    displayName = outFile.name,
-                                                    extension = "pdf",
-                                                    fileType = DocumentFileType.PDF,
-                                                    sizeBytes = outFile.length(),
-                                                    dateModified = System.currentTimeMillis(),
-                                                    filePath = outFile.absolutePath
-                                                )
-                                                repository.insertDocument(doc)
-                                                Toast.makeText(context, "Pages Reordered Successfully!", Toast.LENGTH_SHORT).show()
-                                                onOpenDocument(doc)
-                                            } else {
-                                                Toast.makeText(context, "Failed to reorder PDF pages", Toast.LENGTH_SHORT).show()
+                                        pendingRewardedAction = Pair("Reorder PDF Pages") {
+                                            scope.launch {
+                                                isLoading = true
+                                                val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                                                val outFile = File(pdfDir, "Reordered_${System.currentTimeMillis() % 10000}.pdf")
+                                                val success = pdfEngine.reorderPdfPages(context, reorderUri!!, pageOrder, outFile)
+                                                isLoading = false
+                                                if (success) {
+                                                    val doc = DocumentItem(
+                                                        uriString = Uri.fromFile(outFile).toString(),
+                                                        displayName = outFile.name,
+                                                        extension = "pdf",
+                                                        fileType = DocumentFileType.PDF,
+                                                        sizeBytes = outFile.length(),
+                                                        dateModified = System.currentTimeMillis(),
+                                                        filePath = outFile.absolutePath
+                                                    )
+                                                    repository.insertDocument(doc)
+                                                    Toast.makeText(context, "Pages Reordered Successfully!", Toast.LENGTH_SHORT).show()
+                                                    onOpenDocument(doc)
+                                                } else {
+                                                    Toast.makeText(context, "Failed to reorder PDF pages", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         }
                                     },

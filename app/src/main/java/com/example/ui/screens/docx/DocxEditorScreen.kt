@@ -22,8 +22,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.OpenWith
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,6 +121,15 @@ import com.example.ui.theme.ColorWordBlue
 import kotlinx.coroutines.launch
 import java.io.File
 
+data class EditorImageData(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val uri: Uri,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val zoomScale: Float = 1f,
+    val isFullWidth: Boolean = false
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocxEditorScreen(
@@ -138,16 +160,16 @@ fun DocxEditorScreen(
     // Toolbar panels
     var activePanel by remember { mutableStateOf<FormattingPanel>(FormattingPanel.NONE) }
 
-    // Inserted Pictures list
-    var insertedImages by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    // Inserted Pictures list with interactive dragging, zoom & full width fitting
+    var insertedImages by remember { mutableStateOf<List<EditorImageData>>(emptyList()) }
 
     // Image Picker Launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { pickedUri: Uri? ->
         pickedUri?.let {
-            insertedImages = insertedImages + it
-            Toast.makeText(context, "Picture inserted into document!", Toast.LENGTH_SHORT).show()
+            insertedImages = insertedImages + EditorImageData(uri = it)
+            Toast.makeText(context, "Picture inserted! Drag or tap controls to adjust position & zoom.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -560,40 +582,210 @@ fun DocxEditorScreen(
                         .fillMaxSize()
                         .padding(20.dp)
                 ) {
-                    // Display inserted pictures inside document layout
+                    // Display inserted pictures with dragging, zooming, and fit full document options
                     if (insertedImages.isNotEmpty()) {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 12.dp)
+                                .padding(bottom = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(insertedImages) { imageUri ->
-                                Box(
+                            insertedImages.forEach { imageItem ->
+                                var img by remember(imageItem.id) { mutableStateOf(imageItem) }
+
+                                Card(
                                     modifier = Modifier
-                                        .size(120.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+                                        .fillMaxWidth()
+                                        .border(
+                                            width = 1.dp,
+                                            color = ColorWordBlue.copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
                                 ) {
-                                    AsyncImage(
-                                        model = imageUri,
-                                        contentDescription = "Inserted Picture",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                    IconButton(
-                                        onClick = { insertedImages = insertedImages - imageUri },
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .size(24.dp)
-                                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Close,
-                                            contentDescription = "Remove Picture",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(14.dp)
-                                        )
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        // Toolbar for image options: Fit Full Document, Zoom In/Out, Reset, Delete
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.OpenWith,
+                                                    contentDescription = "Drag Position",
+                                                    tint = ColorWordBlue,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (img.isFullWidth) "Fit Full Document" else "Zoom ${(img.zoomScale * 100).roundToInt()}%",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = ColorWordBlue
+                                                )
+                                            }
+
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                // Fit Full Document Toggle
+                                                IconButton(
+                                                    onClick = {
+                                                        val updated = img.copy(
+                                                            isFullWidth = !img.isFullWidth,
+                                                            offsetX = 0f,
+                                                            offsetY = 0f,
+                                                            zoomScale = 1f
+                                                        )
+                                                        img = updated
+                                                        insertedImages = insertedImages.map { if (it.id == img.id) updated else it }
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Fullscreen,
+                                                        contentDescription = "Fit Full Document",
+                                                        tint = if (img.isFullWidth) ColorWordBlue else Color.Gray,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+
+                                                // Zoom In
+                                                IconButton(
+                                                    onClick = {
+                                                        val newScale = (img.zoomScale + 0.2f).coerceAtMost(3.5f)
+                                                        val updated = img.copy(zoomScale = newScale, isFullWidth = false)
+                                                        img = updated
+                                                        insertedImages = insertedImages.map { if (it.id == img.id) updated else it }
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.ZoomIn,
+                                                        contentDescription = "Zoom In",
+                                                        tint = ColorWordBlue,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+
+                                                // Zoom Out
+                                                IconButton(
+                                                    onClick = {
+                                                        val newScale = (img.zoomScale - 0.2f).coerceAtLeast(0.4f)
+                                                        val updated = img.copy(zoomScale = newScale, isFullWidth = false)
+                                                        img = updated
+                                                        insertedImages = insertedImages.map { if (it.id == img.id) updated else it }
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.ZoomOut,
+                                                        contentDescription = "Zoom Out",
+                                                        tint = ColorWordBlue,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+
+                                                // Reset Position & Zoom
+                                                IconButton(
+                                                    onClick = {
+                                                        val updated = img.copy(offsetX = 0f, offsetY = 0f, zoomScale = 1f, isFullWidth = false)
+                                                        img = updated
+                                                        insertedImages = insertedImages.map { if (it.id == img.id) updated else it }
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.RestartAlt,
+                                                        contentDescription = "Reset Position & Scale",
+                                                        tint = Color.Gray,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+
+                                                // Delete Image
+                                                IconButton(
+                                                    onClick = { insertedImages = insertedImages.filter { it.id != imageItem.id } },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Close,
+                                                        contentDescription = "Remove Picture",
+                                                        tint = Color.Red,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        // Image Interactive Canvas Container
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(if (img.isFullWidth) 280.dp else 220.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFFE2E8F0))
+                                                .pointerInput(img.id) {
+                                                    detectTransformGestures { _, pan, zoom, _ ->
+                                                        if (!img.isFullWidth) {
+                                                            val newZoom = (img.zoomScale * zoom).coerceIn(0.4f, 4f)
+                                                            val newX = img.offsetX + pan.x
+                                                            val newY = img.offsetY + pan.y
+                                                            val updated = img.copy(zoomScale = newZoom, offsetX = newX, offsetY = newY)
+                                                            img = updated
+                                                            insertedImages = insertedImages.map { if (it.id == img.id) updated else it }
+                                                        }
+                                                    }
+                                                }
+                                                .pointerInput(img.id) {
+                                                    detectDragGestures { change, dragAmount ->
+                                                        change.consume()
+                                                        if (!img.isFullWidth) {
+                                                            val updated = img.copy(
+                                                                offsetX = img.offsetX + dragAmount.x,
+                                                                offsetY = img.offsetY + dragAmount.y
+                                                            )
+                                                            img = updated
+                                                            insertedImages = insertedImages.map { if (it.id == img.id) updated else it }
+                                                        }
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            AsyncImage(
+                                                model = img.uri,
+                                                contentDescription = "Inserted Image",
+                                                modifier = Modifier
+                                                    .then(
+                                                        if (img.isFullWidth) {
+                                                            Modifier.fillMaxSize()
+                                                        } else {
+                                                            Modifier
+                                                                .offset { IntOffset(img.offsetX.roundToInt(), img.offsetY.roundToInt()) }
+                                                                .graphicsLayer(
+                                                                    scaleX = img.zoomScale,
+                                                                    scaleY = img.zoomScale
+                                                                )
+                                                        }
+                                                    ),
+                                                contentScale = if (img.isFullWidth) ContentScale.Crop else ContentScale.Fit
+                                            )
+
+                                            if (!img.isFullWidth) {
+                                                Text(
+                                                    text = "Drag or Pinch to reposition & zoom",
+                                                    fontSize = 10.sp,
+                                                    color = Color.White,
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomStart)
+                                                        .padding(6.dp)
+                                                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
