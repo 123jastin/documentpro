@@ -87,6 +87,7 @@ import com.example.data.model.DocumentItem
 import com.example.data.repository.DocumentRepository
 import com.example.ui.theme.ColorPdfRed
 import com.example.ui.theme.PrimaryBlue600
+import com.example.ads.WatchAdDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -110,6 +111,7 @@ fun PdfToolsScreen(
     }
 
     var isLoading by remember { mutableStateOf(false) }
+    var pendingRewardedAction by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
 
     // Merge PDF state
     val mergeUris = remember { mutableStateListOf<Uri>() }
@@ -183,6 +185,17 @@ fun PdfToolsScreen(
                 .padding(innerPadding)
                 .testTag("pdf_tools_screen")
         ) {
+            pendingRewardedAction?.let { (featureTitle, action) ->
+                WatchAdDialog(
+                    title = "PDF Tools - $featureTitle",
+                    featureName = featureTitle,
+                    onDismiss = { pendingRewardedAction = null },
+                    onContinueWithAd = {
+                        pendingRewardedAction = null
+                        action()
+                    }
+                )
+            }
             PrimaryTabRow(
                 selectedTabIndex = selectedToolIndex,
                 containerColor = MaterialTheme.colorScheme.surface
@@ -274,29 +287,31 @@ fun PdfToolsScreen(
                             if (mergeUris.size >= 2) {
                                 item {
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Button(
+                                     Button(
                                         onClick = {
-                                            scope.launch {
-                                                isLoading = true
-                                                val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
-                                                val outFile = File(pdfDir, "Merged_PDF_${System.currentTimeMillis() % 10000}.pdf")
-                                                val success = pdfEngine.mergePdfs(context, mergeUris, outFile)
-                                                isLoading = false
-                                                if (success) {
-                                                    val doc = DocumentItem(
-                                                        uriString = Uri.fromFile(outFile).toString(),
-                                                        displayName = outFile.name,
-                                                        extension = "pdf",
-                                                        fileType = DocumentFileType.PDF,
-                                                        sizeBytes = outFile.length(),
-                                                        dateModified = System.currentTimeMillis(),
-                                                        filePath = outFile.absolutePath
-                                                    )
-                                                    repository.insertDocument(doc)
-                                                    Toast.makeText(context, "PDF Merged Successfully!", Toast.LENGTH_SHORT).show()
-                                                    onOpenDocument(doc)
-                                                } else {
-                                                    Toast.makeText(context, "Failed to merge PDFs", Toast.LENGTH_SHORT).show()
+                                            pendingRewardedAction = Pair("Merge PDFs") {
+                                                scope.launch {
+                                                    isLoading = true
+                                                    val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                                                    val outFile = File(pdfDir, "Merged_PDF_${System.currentTimeMillis() % 10000}.pdf")
+                                                    val success = pdfEngine.mergePdfs(context, mergeUris, outFile)
+                                                    isLoading = false
+                                                    if (success) {
+                                                        val doc = DocumentItem(
+                                                            uriString = Uri.fromFile(outFile).toString(),
+                                                            displayName = outFile.name,
+                                                            extension = "pdf",
+                                                            fileType = DocumentFileType.PDF,
+                                                            sizeBytes = outFile.length(),
+                                                            dateModified = System.currentTimeMillis(),
+                                                            filePath = outFile.absolutePath
+                                                        )
+                                                        repository.insertDocument(doc)
+                                                        Toast.makeText(context, "PDF Merged Successfully!", Toast.LENGTH_SHORT).show()
+                                                        onOpenDocument(doc)
+                                                    } else {
+                                                        Toast.makeText(context, "Failed to merge PDFs", Toast.LENGTH_SHORT).show()
+                                                    }
                                                 }
                                             }
                                         },
@@ -353,47 +368,49 @@ fun PdfToolsScreen(
                                     singleLine = true
                                 )
 
-                                Button(
+                                 Button(
                                     onClick = {
-                                        scope.launch {
-                                            isLoading = true
-                                            val targetPages = mutableListOf<Int>()
-                                            try {
-                                                splitPagesInput.split(",").forEach { part ->
-                                                    val trimmed = part.trim()
-                                                    if (trimmed.contains("-")) {
-                                                        val start = trimmed.substringBefore("-").toInt() - 1
-                                                        val end = trimmed.substringAfter("-").toInt() - 1
-                                                        for (p in start..end) targetPages.add(p)
-                                                    } else if (trimmed.isNotEmpty()) {
-                                                        targetPages.add(trimmed.toInt() - 1)
+                                        pendingRewardedAction = Pair("Split PDF") {
+                                            scope.launch {
+                                                isLoading = true
+                                                val targetPages = mutableListOf<Int>()
+                                                try {
+                                                    splitPagesInput.split(",").forEach { part ->
+                                                        val trimmed = part.trim()
+                                                        if (trimmed.contains("-")) {
+                                                            val start = trimmed.substringBefore("-").toInt() - 1
+                                                            val end = trimmed.substringAfter("-").toInt() - 1
+                                                            for (p in start..end) targetPages.add(p)
+                                                        } else if (trimmed.isNotEmpty()) {
+                                                            targetPages.add(trimmed.toInt() - 1)
+                                                        }
                                                     }
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, "Invalid page format", Toast.LENGTH_SHORT).show()
+                                                    isLoading = false
+                                                    return@launch
                                                 }
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Invalid page format", Toast.LENGTH_SHORT).show()
-                                                isLoading = false
-                                                return@launch
-                                            }
 
-                                            val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
-                                            val outFile = File(pdfDir, "Split_PDF_${System.currentTimeMillis() % 10000}.pdf")
-                                            val success = pdfEngine.splitPdf(context, splitUri!!, targetPages, outFile)
-                                            isLoading = false
-                                            if (success) {
-                                                val doc = DocumentItem(
-                                                    uriString = Uri.fromFile(outFile).toString(),
-                                                    displayName = outFile.name,
-                                                    extension = "pdf",
-                                                    fileType = DocumentFileType.PDF,
-                                                    sizeBytes = outFile.length(),
-                                                    dateModified = System.currentTimeMillis(),
-                                                    filePath = outFile.absolutePath
-                                                )
-                                                repository.insertDocument(doc)
-                                                Toast.makeText(context, "PDF Split Successfully!", Toast.LENGTH_SHORT).show()
-                                                onOpenDocument(doc)
-                                            } else {
-                                                Toast.makeText(context, "Failed to split PDF", Toast.LENGTH_SHORT).show()
+                                                val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                                                val outFile = File(pdfDir, "Split_PDF_${System.currentTimeMillis() % 10000}.pdf")
+                                                val success = pdfEngine.splitPdf(context, splitUri!!, targetPages, outFile)
+                                                isLoading = false
+                                                if (success) {
+                                                    val doc = DocumentItem(
+                                                        uriString = Uri.fromFile(outFile).toString(),
+                                                        displayName = outFile.name,
+                                                        extension = "pdf",
+                                                        fileType = DocumentFileType.PDF,
+                                                        sizeBytes = outFile.length(),
+                                                        dateModified = System.currentTimeMillis(),
+                                                        filePath = outFile.absolutePath
+                                                    )
+                                                    repository.insertDocument(doc)
+                                                    Toast.makeText(context, "PDF Split Successfully!", Toast.LENGTH_SHORT).show()
+                                                    onOpenDocument(doc)
+                                                } else {
+                                                    Toast.makeText(context, "Failed to split PDF", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         }
                                     },
@@ -441,29 +458,31 @@ fun PdfToolsScreen(
                                     }
                                 }
 
-                                Button(
+                                 Button(
                                     onClick = {
-                                        scope.launch {
-                                            isLoading = true
-                                            val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
-                                            val outFile = File(pdfDir, "Compressed_${System.currentTimeMillis() % 10000}.pdf")
-                                            val success = pdfEngine.compressPdf(context, compressUri!!, outFile, targetWidthScale = 0.65f)
-                                            isLoading = false
-                                            if (success) {
-                                                val doc = DocumentItem(
-                                                    uriString = Uri.fromFile(outFile).toString(),
-                                                    displayName = outFile.name,
-                                                    extension = "pdf",
-                                                    fileType = DocumentFileType.PDF,
-                                                    sizeBytes = outFile.length(),
-                                                    dateModified = System.currentTimeMillis(),
-                                                    filePath = outFile.absolutePath
-                                                )
-                                                repository.insertDocument(doc)
-                                                Toast.makeText(context, "PDF Compressed Successfully!", Toast.LENGTH_SHORT).show()
-                                                onOpenDocument(doc)
-                                            } else {
-                                                Toast.makeText(context, "Failed to compress PDF", Toast.LENGTH_SHORT).show()
+                                        pendingRewardedAction = Pair("Compress PDF") {
+                                            scope.launch {
+                                                isLoading = true
+                                                val pdfDir = File(context.filesDir, "documents").apply { if (!exists()) mkdirs() }
+                                                val outFile = File(pdfDir, "Compressed_${System.currentTimeMillis() % 10000}.pdf")
+                                                val success = pdfEngine.compressPdf(context, compressUri!!, outFile, targetWidthScale = 0.65f)
+                                                isLoading = false
+                                                if (success) {
+                                                    val doc = DocumentItem(
+                                                        uriString = Uri.fromFile(outFile).toString(),
+                                                        displayName = outFile.name,
+                                                        extension = "pdf",
+                                                        fileType = DocumentFileType.PDF,
+                                                        sizeBytes = outFile.length(),
+                                                        dateModified = System.currentTimeMillis(),
+                                                        filePath = outFile.absolutePath
+                                                    )
+                                                    repository.insertDocument(doc)
+                                                    Toast.makeText(context, "PDF Compressed Successfully!", Toast.LENGTH_SHORT).show()
+                                                    onOpenDocument(doc)
+                                                } else {
+                                                    Toast.makeText(context, "Failed to compress PDF", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         }
                                     },

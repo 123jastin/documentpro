@@ -54,6 +54,7 @@ import com.example.data.model.DocumentItem
 import com.example.data.repository.DocumentRepository
 import com.example.ui.theme.ColorImagePurple
 import com.example.ui.theme.ColorPdfRed
+import com.example.ads.WatchAdDialog
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -70,6 +71,7 @@ fun ImageToPdfScreen(
     val repository = remember { DocumentRepository(context, db.documentDao(), db.annotationDao(), db.scanDao()) }
 
     var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var showWatchAdDialog by remember { mutableStateOf(false) }
 
     val multiPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
@@ -171,8 +173,17 @@ fun ImageToPdfScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            if (showWatchAdDialog) {
+                WatchAdDialog(
+                    title = "Convert Images to PDF",
+                    featureName = "Image to PDF conversion",
+                    onDismiss = { showWatchAdDialog = false },
+                    onContinueWithAd = { convertImagesToPdf() }
+                )
+            }
+
             Button(
-                onClick = { convertImagesToPdf() },
+                onClick = { showWatchAdDialog = true },
                 enabled = selectedImageUris.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()

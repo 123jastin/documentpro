@@ -89,6 +89,19 @@ fun DocuProApp(initialUri: Uri? = null) {
         Screen.Settings.route
     )
 
+    fun routeToDocumentViewer(doc: DocumentItem) {
+        val encodedUri = Uri.encode(doc.uriString)
+        when (doc.fileType) {
+            DocumentFileType.PDF -> navController.navigate("pdf_viewer/$encodedUri")
+            DocumentFileType.WORD -> navController.navigate("docx_editor/$encodedUri")
+            DocumentFileType.EXCEL -> navController.navigate("spreadsheet/$encodedUri")
+            DocumentFileType.POWERPOINT -> navController.navigate("presentation/$encodedUri")
+            DocumentFileType.TEXT -> navController.navigate("text_editor/$encodedUri")
+            DocumentFileType.IMAGE -> navController.navigate("pdf_viewer/$encodedUri")
+            else -> navController.navigate("text_editor/$encodedUri")
+        }
+    }
+
     val scope = rememberCoroutineScope()
     val openPhoneFilesLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -102,19 +115,6 @@ fun DocuProApp(initialUri: Uri? = null) {
                     routeToDocumentViewer(importedDoc)
                 }
             }
-        }
-    }
-
-    fun routeToDocumentViewer(doc: DocumentItem) {
-        val encodedUri = Uri.encode(doc.uriString)
-        when (doc.fileType) {
-            DocumentFileType.PDF -> navController.navigate("pdf_viewer/$encodedUri")
-            DocumentFileType.WORD -> navController.navigate("docx_editor/$encodedUri")
-            DocumentFileType.EXCEL -> navController.navigate("spreadsheet/$encodedUri")
-            DocumentFileType.POWERPOINT -> navController.navigate("presentation/$encodedUri")
-            DocumentFileType.TEXT -> navController.navigate("text_editor/$encodedUri")
-            DocumentFileType.IMAGE -> navController.navigate("pdf_viewer/$encodedUri")
-            else -> navController.navigate("text_editor/$encodedUri")
         }
     }
 

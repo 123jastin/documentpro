@@ -360,8 +360,6 @@ fun FileManagerScreen(
         }
     }
 
-    val scope = rememberCoroutineScope()
-
     FileOptionBottomSheet(
         document = selectedBottomSheetDoc,
         onDismiss = { selectedBottomSheetDoc = null },
